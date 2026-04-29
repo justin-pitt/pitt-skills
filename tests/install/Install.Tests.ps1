@@ -97,3 +97,30 @@ Describe "Remove-ShadowingSkills" {
         $sentinel.Trim() | Should -Be 'sentinel'
     }
 }
+
+Describe "Install-Symlinks" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "creates ~/.copilot/skills symlink to repo's skills dir" {
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
+        Test-Path $link | Should -BeTrue
+        (Get-Item $link).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills'
+    }
+
+    It "creates ~/.copilot/instructions symlink to repo's .github/instructions" {
+        Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+        Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeTrue
+    }
+}
