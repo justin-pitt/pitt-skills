@@ -377,6 +377,19 @@ git commit -m "docs: M2 migration checklist with upstream sources"
 
 For each skill in the checklist, repeat the pattern. (Five tasks total — one per skill. Showing one in full; rest follow the same shape.)
 
+### Resolution of "vendor vs. catalog" for unmodified skills (M2 decision, 2026-04-29)
+
+The original wording of Task 12 Step 3 and the Tasks 13–16 summary disagreed on what to do when a skill is unmodified vs. upstream. **Resolved policy** (applied to Tasks 12–16 below):
+
+- If upstream is a **small single-skill repo** (one SKILL.md, no other plugin content the user wants), **vendor the SKILL.md** and add a minimal `UPSTREAM.md` recording attribution + SHA + license + "(none — vendored unmodified)" under "My changes". This preserves attribution while keeping the installer one-shot.
+- If upstream is a **large multi-skill marketplace** the user is registering anyway via `catalog/upstream.md` (e.g., `anthropics/skills`), **do not vendor** — let Task 17's catalog entry cover it.
+
+Concrete assignments per the migration checklist:
+- Tasks 12–15 (`owasp-security`, `playwright-testing`, `ui-ux-guide`, `vibesec`): vendor with minimal `UPSTREAM.md`.
+- Task 16 (`webapp-testing`): skip vendoring; covered by `anthropics/skills` catalog entry in Task 17. The Task 16 commit is just the migration-checklist update noting the deferral.
+
+---
+
 ### Task 12: Port `owasp-security`
 
 **Files:**
