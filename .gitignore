@@ -1,0 +1,13 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/settings.json
+
+# Build artifacts (none expected — .github/* is committed)
+*.bak
+*.log
+
+# Test outputs
+tests/output/
+tests/.tmp/
