@@ -269,7 +269,7 @@ Describe "Remove-CopilotCliSymlinks" {
         New-Item -ItemType Directory -Path $link | Out-Null
         'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
 
-        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot -WarningAction SilentlyContinue
+        { Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot -WarningAction SilentlyContinue } | Should -Not -Throw
         Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
     }
 }
@@ -316,18 +316,15 @@ Describe "Uninstall dispatch via -Tools filter" {
     }
 
     It "-Tools claude only touches settings.json, not symlinks" {
-        # Pre-seed both: a settings.json with pitt-skills and a copilot symlink
         Merge-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
         Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
         $link = Join-Path $script:TempHome.FullName '.copilot/skills'
         Test-Path $link | Should -BeTrue
 
-        # Run only the claude uninstall path
-        Remove-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
+        # Invoke the script's dispatch path explicitly.
+        & "$script:RepoRoot/scripts/install.ps1" -Uninstall -Tools claude
 
-        # Symlink survives because we did not call Remove-CopilotCliSymlinks
-        Test-Path $link | Should -BeTrue
-        # Settings cleaned
+        Test-Path $link | Should -BeTrue   # symlink survives
         $settings = Get-Content (Join-Path $env:CLAUDE_HOME 'settings.json') -Raw | ConvertFrom-Json -AsHashtable
         if ($settings.ContainsKey('extraKnownMarketplaces')) {
             $settings['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeFalse
@@ -339,14 +336,11 @@ Describe "Uninstall dispatch via -Tools filter" {
         Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
         Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
 
-        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot
-        Remove-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+        & "$script:RepoRoot/scripts/install.ps1" -Uninstall -Tools copilotCli,vscode
 
-        # Settings.json untouched: pitt-skills entry still present
         $settings = Get-Content (Join-Path $env:CLAUDE_HOME 'settings.json') -Raw | ConvertFrom-Json -AsHashtable
         $settings['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeTrue
         $settings['enabledPlugins'].ContainsKey('pitt-skills@pitt-skills') | Should -BeTrue
-        # Symlinks gone
         Test-Path (Join-Path $script:TempHome.FullName '.copilot/skills') | Should -BeFalse
         Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeFalse
     }

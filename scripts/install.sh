@@ -51,6 +51,9 @@ remove_claude_settings() {
         return 0
     fi
     cp "$settings" "$settings.bak"
+    # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
+    # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
+    # marketplaces a user might want independently of this plugin - leave them alone.
     if ! jq '
             del(.extraKnownMarketplaces["pitt-skills"])
             | del(.enabledPlugins["pitt-skills@pitt-skills"])

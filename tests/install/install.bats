@@ -114,6 +114,7 @@ JSON
     mkdir -p "$HOME/.copilot/skills"
     echo "real content" > "$HOME/.copilot/skills/do-not-delete.md"
     run "$REPO_ROOT/scripts/install.sh" --uninstall --tools copilotCli
+    [ "$status" -eq 0 ]
     # Real dir should still be there with its content intact
     [ -d "$HOME/.copilot/skills" ]
     [ -f "$HOME/.copilot/skills/do-not-delete.md" ]

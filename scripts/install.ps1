@@ -175,6 +175,9 @@ function Remove-ClaudeSettings {
     }
 
     if ($existing.ContainsKey('extraKnownMarketplaces') -and $existing['extraKnownMarketplaces'] -is [hashtable]) {
+        # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
+        # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
+        # marketplaces a user might want independently of this plugin — leave them alone.
         if ($existing['extraKnownMarketplaces'].ContainsKey('pitt-skills')) {
             $existing['extraKnownMarketplaces'].Remove('pitt-skills')
         }
@@ -200,12 +203,15 @@ function Remove-ClaudeSettings {
 }
 
 function ConvertTo-OrderedHashtable {
+    # Preserve insertion order. ConvertFrom-Json -AsHashtable in pwsh 7.3+ returns
+    # an OrderedHashtable that already preserves order; we mirror that into [ordered]
+    # so older pwsh and downstream Set-Content writes are deterministic without
+    # alphabetizing the user's other keys.
     [CmdletBinding()]
     param([Parameter(Mandatory, ValueFromPipeline)] $Value)
     if ($Value -is [hashtable]) {
-        $sortedKeys = $Value.Keys | Sort-Object
         $ordered = [ordered]@{}
-        foreach ($k in $sortedKeys) {
+        foreach ($k in $Value.Keys) {
             $ordered[$k] = ConvertTo-OrderedHashtable $Value[$k]
         }
         return $ordered
