@@ -4,3 +4,7 @@
 # Letting `core.autocrlf=true` rewrite them would break the byte-for-byte diff in
 # tests/build/Build.Tests.ps1.
 tests/build/fixtures/** -text
+
+# Shell scripts must be LF on every platform — Git for Windows would otherwise
+# convert them to CRLF on checkout under core.autocrlf=true, breaking bash.
+*.sh text eol=lf
