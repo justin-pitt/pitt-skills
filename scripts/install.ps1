@@ -24,7 +24,11 @@ function Merge-ClaudeSettings {
 
     if (Test-Path $settingsPath) {
         Copy-Item $settingsPath "$settingsPath.bak" -Force
-        $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+        try {
+            $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+        } catch {
+            throw "Existing settings.json at $settingsPath is not valid JSON ($($_.Exception.Message)). Original backed up at $settingsPath.bak. Fix the JSON manually and re-run."
+        }
     } else {
         $existing = @{}
     }
@@ -34,6 +38,9 @@ function Merge-ClaudeSettings {
             foreach ($subkey in $snippet[$key].Keys) {
                 $existing[$key][$subkey] = $snippet[$key][$subkey]
             }
+        } elseif ($existing.ContainsKey($key) -and $existing[$key].GetType() -ne $snippet[$key].GetType()) {
+            Write-Warning "Settings key '$key' has incompatible types in existing ($($existing[$key].GetType().Name)) vs snippet ($($snippet[$key].GetType().Name)). Existing value will be overwritten — see $settingsPath.bak to restore."
+            $existing[$key] = $snippet[$key]
         } else {
             $existing[$key] = $snippet[$key]
         }
@@ -73,11 +80,19 @@ function Remove-ShadowingSkills {
     $backupDir = Join-Path $standaloneDir ".shadow-backup-$stamp"
     New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 
+    $failures = @()
     foreach ($name in $shadowing) {
         $src = Join-Path $standaloneDir $name
         $dst = Join-Path $backupDir $name
-        Move-Item $src $dst
-        Write-Host "  moved $src -> $dst"
+        try {
+            Move-Item $src $dst -ErrorAction Stop
+            Write-Host "  moved $src -> $dst"
+        } catch {
+            $failures += "$name`: $($_.Exception.Message)"
+        }
+    }
+    if ($failures) {
+        throw "Failed to back up $($failures.Count) shadowing skill(s):`n  $($failures -join "`n  ")"
     }
 }
 
