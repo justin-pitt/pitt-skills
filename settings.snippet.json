@@ -1,0 +1,19 @@
+{
+  "extraKnownMarketplaces": {
+    "pitt-skills": {
+      "source": { "source": "github", "repo": "justin-pitt/pitt-skills" }
+    },
+    "superpowers-dev": {
+      "source": { "source": "git", "url": "https://github.com/obra/superpowers.git" }
+    },
+    "anthropic-agent-skills": {
+      "source": { "source": "github", "repo": "anthropics/skills" }
+    },
+    "superpowers-marketplace": {
+      "source": { "source": "github", "repo": "obra/superpowers-marketplace" }
+    }
+  },
+  "enabledPlugins": {
+    "pitt-skills@pitt-skills": true
+  }
+}
