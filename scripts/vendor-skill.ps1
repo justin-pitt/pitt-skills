@@ -66,7 +66,7 @@ function Invoke-VendorSkill {
 "@
     Set-Content -Path (Join-Path $dest 'UPSTREAM.md') -Value $upstream
 
-    Write-Host "Vendored $SkillName from $UpstreamRepo@$UpstreamSha"
+    Write-Host "✓ Vendored $SkillName from $UpstreamRepo@$UpstreamSha"
 }
 
 if (-not $DotSource) {
