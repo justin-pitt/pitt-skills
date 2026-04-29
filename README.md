@@ -1,6 +1,9 @@
 # pitt-skills
 
-Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace and (after Milestone 3) as Copilot Chat instructions.
+[![build](https://github.com/justin-pitt/pitt-skills/actions/workflows/build.yml/badge.svg)](https://github.com/justin-pitt/pitt-skills/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/justin-pitt/pitt-skills)](https://github.com/justin-pitt/pitt-skills/releases/latest)
+
+Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace and as Copilot Chat instructions.
 
 ## Quick install — paste into your AI assistant
 
@@ -38,6 +41,10 @@ See [catalog/](catalog/) for the list of skills and the upstream marketplaces th
 ## Authoring
 
 See [docs/authoring-a-skill.md](docs/authoring-a-skill.md).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
