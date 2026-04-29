@@ -1,4 +1,6 @@
 [CmdletBinding()]
+# -DotSource and -RemoveShadowing are wired up in M2.
+# -WhatIf, -Uninstall, and -Tools are reserved for M3/M4 (Copilot symlinks, uninstall path) and currently no-op.
 param(
     [switch]$DotSource,
     [switch]$WhatIf,
