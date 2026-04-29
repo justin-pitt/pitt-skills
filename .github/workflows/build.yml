@@ -1,0 +1,40 @@
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PowerShell
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget apt-transport-https software-properties-common
+          source /etc/os-release
+          wget -q "https://packages.microsoft.com/config/ubuntu/$VERSION_ID/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update && sudo apt-get install -y powershell
+      - name: Run build
+        run: ./scripts/build.sh
+      - name: Verify no diff
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::build.ps1 produced changes — commit them"
+            exit 1
+          fi
+  pester:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester
+        run: pwsh -c "Install-Module Pester -Scope CurrentUser -Force"
+      - name: Run Pester tests
+        run: pwsh -c "Invoke-Pester tests/ -Output Detailed -CI"
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y bats
+      - run: bats tests/install/install.bats
