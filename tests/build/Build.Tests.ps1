@@ -1,3 +1,4 @@
+#requires -Version 7.0
 # Pester 5 tests for scripts/build.ps1 (Task 21).
 #
 # Strategy: copy the input fixture tree into a temp WorkDir, run build.ps1 -RepoRoot $WorkDir,
@@ -40,6 +41,7 @@ Describe "build.ps1 -- golden file" {
         & "$script:RepoRoot/scripts/build.ps1" -RepoRoot $script:WorkDir
         $firstHash = Get-ChildItem -Recurse -File "$script:WorkDir/.github" |
             Get-FileHash | Sort-Object Path
+        $firstHash | Should -Not -BeNullOrEmpty -Because "build should have produced .github/* files; nothing to compare"
         & "$script:RepoRoot/scripts/build.ps1" -RepoRoot $script:WorkDir
         $secondHash = Get-ChildItem -Recurse -File "$script:WorkDir/.github" |
             Get-FileHash | Sort-Object Path

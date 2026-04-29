@@ -1,3 +1,4 @@
+#requires -Version 7.0
 # One-shot script to author golden-file fixtures with byte-exact output.
 # Mirrors what `scripts/build.ps1` (Task 21) is intended to produce, so:
 #   - Text files: LF interior newlines, trailing CRLF (Set-Content default on Windows pwsh)
