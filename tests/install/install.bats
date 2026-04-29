@@ -57,3 +57,74 @@ teardown() {
     run "$REPO_ROOT/scripts/install.sh" --tools bogus-tool
     [[ "$output" == *"Unknown tool 'bogus-tool'"* ]]
 }
+
+@test "install.sh --uninstall --tools claude removes pitt-skills keys and preserves user keys" {
+    mkdir -p "$HOME/.claude"
+    cat > "$HOME/.claude/settings.json" <<'JSON'
+{
+  "theme": "dark",
+  "extraKnownMarketplaces": {
+    "pitt-skills": { "source": { "source": "github", "repo": "justin-pitt/pitt-skills" } },
+    "someOtherMarketplace": { "source": { "source": "github", "repo": "x/y" } }
+  },
+  "enabledPlugins": {
+    "pitt-skills@pitt-skills": true,
+    "other@plugin": true
+  }
+}
+JSON
+    "$REPO_ROOT/scripts/install.sh" --uninstall --tools claude
+    [ -f "$HOME/.claude/settings.json.bak" ]
+    grep -q '"theme": "dark"' "$HOME/.claude/settings.json"
+    grep -q "someOtherMarketplace" "$HOME/.claude/settings.json"
+    grep -q "other@plugin" "$HOME/.claude/settings.json"
+    ! grep -q '"pitt-skills":' "$HOME/.claude/settings.json"
+    ! grep -q '"pitt-skills@pitt-skills"' "$HOME/.claude/settings.json"
+}
+
+@test "install.sh --uninstall --tools claude drops empty parents" {
+    mkdir -p "$HOME/.claude"
+    cat > "$HOME/.claude/settings.json" <<'JSON'
+{
+  "theme": "dark",
+  "extraKnownMarketplaces": {
+    "pitt-skills": { "source": { "source": "github", "repo": "justin-pitt/pitt-skills" } }
+  },
+  "enabledPlugins": { "pitt-skills@pitt-skills": true }
+}
+JSON
+    "$REPO_ROOT/scripts/install.sh" --uninstall --tools claude
+    ! grep -q "extraKnownMarketplaces" "$HOME/.claude/settings.json"
+    ! grep -q "enabledPlugins" "$HOME/.claude/settings.json"
+    grep -q '"theme": "dark"' "$HOME/.claude/settings.json"
+}
+
+@test "install.sh --uninstall --tools copilotCli removes symlink and is idempotent" {
+    "$REPO_ROOT/scripts/install.sh" --tools copilotCli
+    [ -L "$HOME/.copilot/skills" ]
+    "$REPO_ROOT/scripts/install.sh" --uninstall --tools copilotCli
+    [ ! -e "$HOME/.copilot/skills" ]
+    # Idempotent second run
+    run "$REPO_ROOT/scripts/install.sh" --uninstall --tools copilotCli
+    [ "$status" -eq 0 ]
+    [ ! -e "$HOME/.copilot/skills" ]
+}
+
+@test "install.sh --uninstall --tools copilotCli refuses to delete a real directory" {
+    mkdir -p "$HOME/.copilot/skills"
+    echo "real content" > "$HOME/.copilot/skills/do-not-delete.md"
+    run "$REPO_ROOT/scripts/install.sh" --uninstall --tools copilotCli
+    [ "$status" -eq 0 ]
+    # Real dir should still be there with its content intact
+    [ -d "$HOME/.copilot/skills" ]
+    [ -f "$HOME/.copilot/skills/do-not-delete.md" ]
+    [[ "$output" == *"Refusing to delete non-symlink"* ]]
+}
+
+@test "install.sh --uninstall is idempotent when settings.json is absent" {
+    [ ! -e "$HOME/.claude/settings.json" ]
+    run "$REPO_ROOT/scripts/install.sh" --uninstall --tools claude
+    [ "$status" -eq 0 ]
+    [ ! -e "$HOME/.claude/settings.json" ]
+}
+

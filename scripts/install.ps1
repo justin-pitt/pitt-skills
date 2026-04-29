@@ -1,8 +1,9 @@
 [CmdletBinding()]
-# -DotSource, -RemoveShadowing, and -Tools are wired up.
-# In M3, -Tools defaults to all three integrations (claude, copilotCli, vscode); pass -Tools explicitly to limit.
-# When -Tools is not passed, the script auto-detects which CLIs are installed (claude / copilot / code) and only wires those up.
-# -WhatIf and -Uninstall are reserved for M4 and currently no-op.
+# -DotSource, -RemoveShadowing, -Tools, and -Uninstall are wired up.
+# -Tools defaults to all three integrations (claude, copilotCli, vscode); pass -Tools explicitly to limit.
+# When -Tools is not passed, the script auto-detects which CLIs are installed (claude / copilot / code)
+# and only wires those up. The same auto-detection gates -Uninstall.
+# -WhatIf is reserved for a future milestone and currently no-op.
 param(
     [switch]$DotSource,
     [switch]$WhatIf,
@@ -155,6 +156,103 @@ function Install-CopilotChatSymlinks {
     }
 }
 
+function Remove-ClaudeSettings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $SnippetPath  # accepted for symmetry; unused
+    )
+    $claudeHome = Get-ClaudeHome
+    $settingsPath = Join-Path $claudeHome 'settings.json'
+    if (-not (Test-Path $settingsPath)) {
+        Write-Host "Claude settings: nothing to remove (no $settingsPath)."
+        return
+    }
+    Copy-Item $settingsPath "$settingsPath.bak" -Force
+    try {
+        $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+    } catch {
+        throw "Existing settings.json at $settingsPath is not valid JSON ($($_.Exception.Message)). Original backed up at $settingsPath.bak. Fix the JSON manually and re-run."
+    }
+
+    if ($existing.ContainsKey('extraKnownMarketplaces') -and $existing['extraKnownMarketplaces'] -is [hashtable]) {
+        # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
+        # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
+        # marketplaces a user might want independently of this plugin — leave them alone.
+        if ($existing['extraKnownMarketplaces'].ContainsKey('pitt-skills')) {
+            $existing['extraKnownMarketplaces'].Remove('pitt-skills')
+        }
+        if ($existing['extraKnownMarketplaces'].Count -eq 0) {
+            $existing.Remove('extraKnownMarketplaces')
+        }
+    }
+
+    if ($existing.ContainsKey('enabledPlugins') -and $existing['enabledPlugins'] -is [hashtable]) {
+        if ($existing['enabledPlugins'].ContainsKey('pitt-skills@pitt-skills')) {
+            $existing['enabledPlugins'].Remove('pitt-skills@pitt-skills')
+        }
+        if ($existing['enabledPlugins'].Count -eq 0) {
+            $existing.Remove('enabledPlugins')
+        }
+    }
+
+    # ConvertFrom-Json -AsHashtable returns a regular [hashtable] with non-deterministic
+    # key order. Convert each level to [ordered] so the on-disk file is stable across runs.
+    $ordered = ConvertTo-OrderedHashtable $existing
+    $ordered | ConvertTo-Json -Depth 32 | Set-Content $settingsPath
+    Write-Host "Claude settings: removed pitt-skills entries (backup at $settingsPath.bak)."
+}
+
+function ConvertTo-OrderedHashtable {
+    # Preserve insertion order. ConvertFrom-Json -AsHashtable in pwsh 7.3+ returns
+    # an OrderedHashtable that already preserves order; we mirror that into [ordered]
+    # so older pwsh and downstream Set-Content writes are deterministic without
+    # alphabetizing the user's other keys.
+    [CmdletBinding()]
+    param([Parameter(Mandatory, ValueFromPipeline)] $Value)
+    if ($Value -is [hashtable]) {
+        $ordered = [ordered]@{}
+        foreach ($k in $Value.Keys) {
+            $ordered[$k] = ConvertTo-OrderedHashtable $Value[$k]
+        }
+        return $ordered
+    }
+    return $Value
+}
+
+function Remove-DirectorySymlink {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Link)
+    if (-not (Test-Path $Link)) {
+        return [pscustomobject]@{ Path = $Link; Status = 'absent' }
+    }
+    $existing = Get-Item -Force $Link
+    if ($existing.LinkType -in @('SymbolicLink', 'Junction')) {
+        # Mirror New-DirectorySymlink's removal: -Force without -Recurse so we never
+        # accidentally walk into the link target and delete real content.
+        Remove-Item $Link -Force
+        return [pscustomobject]@{ Path = $Link; Status = 'removed' }
+    }
+    Write-Warning "Refusing to delete non-symlink at '$Link'. Looks like real content; remove manually if intended."
+    return [pscustomobject]@{ Path = $Link; Status = 'refused' }
+}
+
+function Remove-CopilotCliSymlinks {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+    $result = Remove-DirectorySymlink -Link (Join-Path $userHome '.copilot/skills')
+    Write-Host "Copilot CLI: ~/.copilot/skills $($result.Status)"
+}
+
+function Remove-CopilotChatSymlinks {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+    $r1 = Remove-DirectorySymlink -Link (Join-Path $userHome '.copilot/instructions')
+    $r2 = Remove-DirectorySymlink -Link (Join-Path $userHome '.copilot/prompts')
+    Write-Host "Copilot Chat: ~/.copilot/instructions $($r1.Status); ~/.copilot/prompts $($r2.Status)"
+}
+
 function Test-ToolInstalled {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $Name)
@@ -164,17 +262,20 @@ function Test-ToolInstalled {
 if (-not $DotSource) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
 
-    # Detect shadowing before merging settings — surface the conflict early.
-    # Only meaningful for the Claude integration, but cheap to always run.
-    $shadowing = Get-ShadowingSkills -RepoRoot $repoRoot
-    if ($shadowing) {
-        Write-Warning "Found $($shadowing.Count) standalone skill(s) under ~/.claude/skills/ that will SHADOW the pitt-skills plugin version:"
-        $shadowing | ForEach-Object { Write-Warning "  - $_" }
-        if ($RemoveShadowing) {
-            Write-Host "Backing up and removing shadowing copies (per -RemoveShadowing)..."
-            Remove-ShadowingSkills -RepoRoot $repoRoot
-        } else {
-            Write-Warning "Re-run with -RemoveShadowing to back them up to ~/.claude/skills/.shadow-backup-<timestamp>/ and remove the originals. Until then, the plugin version of each listed skill will not load."
+    if (-not $Uninstall) {
+        # Detect shadowing before merging settings — surface the conflict early.
+        # Only meaningful for the Claude integration, but cheap to always run.
+        # Skipped on -Uninstall: we are not adding plugin skills, so shadowing is moot.
+        $shadowing = Get-ShadowingSkills -RepoRoot $repoRoot
+        if ($shadowing) {
+            Write-Warning "Found $($shadowing.Count) standalone skill(s) under ~/.claude/skills/ that will SHADOW the pitt-skills plugin version:"
+            $shadowing | ForEach-Object { Write-Warning "  - $_" }
+            if ($RemoveShadowing) {
+                Write-Host "Backing up and removing shadowing copies (per -RemoveShadowing)..."
+                Remove-ShadowingSkills -RepoRoot $repoRoot
+            } else {
+                Write-Warning "Re-run with -RemoveShadowing to back them up to ~/.claude/skills/.shadow-backup-<timestamp>/ and remove the originals. Until then, the plugin version of each listed skill will not load."
+            }
         }
     }
 
@@ -184,24 +285,39 @@ if (-not $DotSource) {
     if (Test-ToolInstalled 'code')    { $detected += 'vscode' }
     # Auto-detect only if the caller did not explicitly pass -Tools. The param has a
     # non-empty default, so checking $PSBoundParameters is the only way to distinguish
-    # "user picked all three" from "user did not specify".
+    # "user picked all three" from "user did not specify". Same gate applies to -Uninstall.
     if (-not $PSBoundParameters.ContainsKey('Tools')) { $Tools = $detected }
 
     if (-not $Tools -or $Tools.Count -eq 0) {
-        Write-Warning "No tools to wire up. Pass -Tools claude,copilotCli,vscode to override auto-detection."
+        $verb = if ($Uninstall) { 'uninstall' } else { 'wire up' }
+        Write-Warning "No tools to $verb. Pass -Tools claude,copilotCli,vscode to override auto-detection."
         return
     }
 
+    $action = if ($Uninstall) { 'Uninstalling' } else { 'Wiring up' }
     Write-Host "Detected tools: $($detected -join ', ')"
-    Write-Host "Wiring up: $($Tools -join ', ')"
+    Write-Host "${action}: $($Tools -join ', ')"
 
     foreach ($tool in $Tools) {
-        switch ($tool) {
-            'claude'     { Merge-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
-            'copilotCli' { Install-CopilotCliSymlinks -RepoRoot $repoRoot }
-            'vscode'     { Install-CopilotChatSymlinks -RepoRoot $repoRoot }
-            default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
+        if ($Uninstall) {
+            switch ($tool) {
+                'claude'     { Remove-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
+                'copilotCli' { Remove-CopilotCliSymlinks -RepoRoot $repoRoot }
+                'vscode'     { Remove-CopilotChatSymlinks -RepoRoot $repoRoot }
+                default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
+            }
+        } else {
+            switch ($tool) {
+                'claude'     { Merge-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
+                'copilotCli' { Install-CopilotCliSymlinks -RepoRoot $repoRoot }
+                'vscode'     { Install-CopilotChatSymlinks -RepoRoot $repoRoot }
+                default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
+            }
         }
     }
-    Write-Host "Done. Restart your tool(s)."
+    if ($Uninstall) {
+        Write-Host "Done. Restart your tool(s) to pick up changes."
+    } else {
+        Write-Host "Done. Restart your tool(s)."
+    }
 }
