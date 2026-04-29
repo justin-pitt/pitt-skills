@@ -22,28 +22,34 @@
 ### `owasp-security`
 - **Upstream local clone:** `c:/Code/claude-skills/owasp-security/` (tracks `https://github.com/agamm/claude-code-owasp.git`)
 - **Upstream file:** `OWASP-2025-2026-Report.md` (the repo's `SKILL.md` is unconventionally named after the report)
-- **Diff vs `~/.claude/skills/owasp-security/SKILL.md`:** byte-identical (792 lines, no diff output). Not author-modified — port to the catalog without `UPSTREAM.md`.
+- **Diff vs `~/.claude/skills/owasp-security/SKILL.md`:** byte-identical (792 lines, no diff output). Not author-modified.
+- **M2 disposition:** Vendored unmodified into `plugins/pitt-skills/skills/owasp-security/` with minimal `UPSTREAM.md` (M2 hybrid policy).
 
 ### `playwright-testing`
 - **Upstream local clone:** `c:/Code/claude-skills/playwright-skill/` (tracks `https://github.com/testdino-hq/playwright-skill.git`)
 - **Upstream file:** `SKILL.md` at repo root
-- **Diff vs `~/.claude/skills/playwright-testing/SKILL.md`:** byte-identical (no diff output). Not author-modified. Note: standalone is named `playwright-testing` while upstream repo is `playwright-skill`; only the local skill folder name differs from upstream repo name. Port without `UPSTREAM.md`.
+- **Diff vs `~/.claude/skills/playwright-testing/SKILL.md`:** byte-identical (no diff output). Not author-modified. Note: standalone is named `playwright-testing` while upstream repo is `playwright-skill`; only the local skill folder name differs from upstream repo name.
+- **M2 disposition:** Vendored unmodified into `plugins/pitt-skills/skills/playwright-testing/` with minimal `UPSTREAM.md` (M2 hybrid policy). Reference tree (`core/`, `ci/`, `migration/`, `playwright-cli/`, `pom/`) was vendored alongside `SKILL.md` so the hub-and-spokes links resolve inside the plugin.
 
 ### `ui-ux-guide`
 - **Upstream local clone:** `c:/Code/claude-skills/ui-ux-guide/` (tracks `https://github.com/oil-oil/oiloil-ui-ux-guide.git`)
 - **Upstream file:** `skills/oiloil-ui-ux-guide/SKILL.md`
-- **Diff vs `~/.claude/skills/ui-ux-guide/SKILL.md`:** byte-identical (no diff output). Not author-modified. Port without `UPSTREAM.md`.
+- **Upstream license:** Apache-2.0 (per `LICENSE.txt` at the vendored SHA).
+- **Diff vs `~/.claude/skills/ui-ux-guide/SKILL.md`:** byte-identical (no diff output). Not author-modified.
+- **M2 disposition:** Vendored unmodified into `plugins/pitt-skills/skills/ui-ux-guide/` with minimal `UPSTREAM.md` (M2 hybrid policy).
 
 ### `vibesec`
 - **Upstream local clone:** `c:/Code/claude-skills/vibesec/` (tracks `https://github.com/BehiSecc/VibeSec-Skill.git`)
 - **Upstream file:** `SKILL.md` at repo root
-- **Diff vs `~/.claude/skills/vibesec/SKILL.md`:** byte-identical (no diff output). Not author-modified. Port without `UPSTREAM.md`.
+- **Upstream license:** Apache-2.0 (per `LICENSE` at the vendored SHA).
+- **Diff vs `~/.claude/skills/vibesec/SKILL.md`:** byte-identical (no diff output). Not author-modified.
+- **M2 disposition:** Vendored unmodified into `plugins/pitt-skills/skills/vibesec/` with minimal `UPSTREAM.md` (M2 hybrid policy).
 
 ### `webapp-testing`
 - **Upstream local clone:** `c:/Code/claude-skills/anthropic-skills/` (tracks `https://github.com/anthropics/skills.git`)
 - **Upstream file:** `skills/webapp-testing/SKILL.md`
 - **Diff vs `~/.claude/skills/webapp-testing/SKILL.md`:** byte-identical (no diff output). Not author-modified. Last-touching commit for the file specifically: `ef740771ac901e03fbca3ce4e1c453a96010f30a`; HEAD listed in the table is the repo head.
-- **M2 disposition: deferred to catalog (Task 17), NOT vendored under Task 16.** Per the hybrid vendor-vs-catalog policy decided 2026-04-29 (see `docs/plans/2026-04-28-pitt-skills-marketplace.md`), `anthropics/skills` is a large multi-skill marketplace; cataloging it as a reference avoids duplicating Anthropic's curated set into our plugin. Task 16's commit therefore only records this deferral.
+- **M2 disposition:** Deferred to anthropics/skills catalog entry in `catalog/upstream.md` (Task 17). Not vendored. Per the hybrid vendor-vs-catalog policy decided 2026-04-29 (see `docs/plans/2026-04-28-pitt-skills-marketplace.md`), `anthropics/skills` is a large multi-skill marketplace; cataloging it as a reference avoids duplicating Anthropic's curated set into our plugin. Task 16's commit therefore only records this deferral.
 
 ### `cortex-xsiam`, `tines`, `tufin`
 - Author-original skills (Justin's own work). Not vendored from any upstream repository.
