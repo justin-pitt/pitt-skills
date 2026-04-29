@@ -26,6 +26,8 @@ pwsh ./scripts/install.ps1     # Windows
 ./scripts/install.sh           # macOS / Linux
 ```
 
+To remove the wiring later, pass `-Uninstall` (PowerShell) or `--uninstall` (Bash). It removes the symlinks and strips the `pitt-skills` keys from `settings.json`, leaving everything else alone.
+
 ## VS Code Chat — manual fallback (no symlinks)
 
 If your environment blocks symlinks, add to your VS Code user settings.json:

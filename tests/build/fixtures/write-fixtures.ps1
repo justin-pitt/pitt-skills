@@ -154,7 +154,7 @@ Set-Content (Join-Path $expectedDir '.github/copilot-instructions.md') $preamble
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '0.1.0'
+    version = '1.0.0'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 $pluginManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/.claude-plugin/plugin.json')
