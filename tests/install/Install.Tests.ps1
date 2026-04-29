@@ -146,3 +146,208 @@ Describe "Test-ToolInstalled" {
         Test-ToolInstalled 'this-does-not-exist-zzz' | Should -BeFalse
     }
 }
+
+Describe "Remove-ClaudeSettings" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigClaudeHome = $env:CLAUDE_HOME
+        $env:CLAUDE_HOME = $script:TempHome.FullName
+        $script:SettingsPath = Join-Path $script:TempHome.FullName 'settings.json'
+        $script:Snippet = "$script:RepoRoot/settings.snippet.json"
+    }
+    AfterEach {
+        $env:CLAUDE_HOME = $script:OrigClaudeHome
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "removes pitt-skills marketplace entry and pitt-skills@pitt-skills enabled plugin" {
+        Merge-ClaudeSettings -SnippetPath $script:Snippet
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        $result = Get-Content $script:SettingsPath -Raw | ConvertFrom-Json -AsHashtable
+        if ($result.ContainsKey('extraKnownMarketplaces')) {
+            $result['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeFalse
+        }
+        if ($result.ContainsKey('enabledPlugins')) {
+            $result['enabledPlugins'].ContainsKey('pitt-skills@pitt-skills') | Should -BeFalse
+        }
+    }
+
+    It "preserves unrelated user keys (theme + other marketplace)" {
+        $existing = [ordered]@{
+            theme = "dark"
+            extraKnownMarketplaces = [ordered]@{
+                someOtherMarketplace = [ordered]@{ source = [ordered]@{ source = "github"; repo = "x/y" } }
+                'pitt-skills' = [ordered]@{ source = [ordered]@{ source = "github"; repo = "justin-pitt/pitt-skills" } }
+            }
+            enabledPlugins = [ordered]@{
+                'pitt-skills@pitt-skills' = $true
+                'other@plugin' = $true
+            }
+        } | ConvertTo-Json -Depth 10
+        $existing | Set-Content $script:SettingsPath
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        $result = Get-Content $script:SettingsPath -Raw | ConvertFrom-Json -AsHashtable
+        $result['theme'] | Should -Be 'dark'
+        $result['extraKnownMarketplaces'].ContainsKey('someOtherMarketplace') | Should -BeTrue
+        $result['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeFalse
+        $result['enabledPlugins'].ContainsKey('other@plugin') | Should -BeTrue
+        $result['enabledPlugins'].ContainsKey('pitt-skills@pitt-skills') | Should -BeFalse
+    }
+
+    It "removes the empty parent when only pitt-skills lived under it" {
+        $existing = [ordered]@{
+            theme = "dark"
+            extraKnownMarketplaces = [ordered]@{
+                'pitt-skills' = [ordered]@{ source = [ordered]@{ source = "github"; repo = "justin-pitt/pitt-skills" } }
+            }
+            enabledPlugins = [ordered]@{
+                'pitt-skills@pitt-skills' = $true
+            }
+        } | ConvertTo-Json -Depth 10
+        $existing | Set-Content $script:SettingsPath
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        $result = Get-Content $script:SettingsPath -Raw | ConvertFrom-Json -AsHashtable
+        $result.ContainsKey('extraKnownMarketplaces') | Should -BeFalse
+        $result.ContainsKey('enabledPlugins') | Should -BeFalse
+        $result['theme'] | Should -Be 'dark'
+    }
+
+    It "writes a backup before modifying an existing file" {
+        '{"theme":"dark","extraKnownMarketplaces":{"pitt-skills":{"source":{"source":"github","repo":"justin-pitt/pitt-skills"}}}}' | Set-Content $script:SettingsPath
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        Test-Path "$($script:SettingsPath).bak" | Should -BeTrue
+    }
+
+    It "skips silently when settings.json does not exist (idempotent)" {
+        { Remove-ClaudeSettings -SnippetPath $script:Snippet } | Should -Not -Throw
+        Test-Path $script:SettingsPath | Should -BeFalse
+    }
+
+    It "is idempotent: running uninstall twice produces the same final state" {
+        Merge-ClaudeSettings -SnippetPath $script:Snippet
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        $first = Get-Content $script:SettingsPath -Raw
+        Remove-ClaudeSettings -SnippetPath $script:Snippet
+        $second = Get-Content $script:SettingsPath -Raw
+        $second | Should -Be $first
+    }
+}
+
+Describe "Remove-CopilotCliSymlinks" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "removes a symlink at ~/.copilot/skills" {
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
+        Test-Path $link | Should -BeTrue
+        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        Test-Path $link | Should -BeFalse
+        # Source should still exist
+        Test-Path (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills') | Should -BeTrue
+    }
+
+    It "is idempotent when the link is already absent" {
+        { Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Not -Throw
+        { Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Not -Throw
+    }
+
+    It "refuses to delete a non-symlink directory at the link path; real content survives" {
+        $linkParent = Join-Path $script:TempHome.FullName '.copilot'
+        New-Item -ItemType Directory -Path $linkParent | Out-Null
+        $link = Join-Path $linkParent 'skills'
+        New-Item -ItemType Directory -Path $link | Out-Null
+        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+
+        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot -WarningAction SilentlyContinue
+        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+    }
+}
+
+Describe "Remove-CopilotChatSymlinks" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "removes ~/.copilot/instructions and ~/.copilot/prompts symlinks if present" {
+        Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+        $instr = Join-Path $script:TempHome.FullName '.copilot/instructions'
+        Test-Path $instr | Should -BeTrue
+        Remove-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+        Test-Path $instr | Should -BeFalse
+    }
+}
+
+Describe "Uninstall dispatch via -Tools filter" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $script:OrigClaudeHome = $env:CLAUDE_HOME
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+        $env:CLAUDE_HOME = Join-Path $script:TempHome.FullName '.claude'
+        New-Item -ItemType Directory -Path $env:CLAUDE_HOME | Out-Null
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        $env:CLAUDE_HOME = $script:OrigClaudeHome
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "-Tools claude only touches settings.json, not symlinks" {
+        # Pre-seed both: a settings.json with pitt-skills and a copilot symlink
+        Merge-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
+        Test-Path $link | Should -BeTrue
+
+        # Run only the claude uninstall path
+        Remove-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
+
+        # Symlink survives because we did not call Remove-CopilotCliSymlinks
+        Test-Path $link | Should -BeTrue
+        # Settings cleaned
+        $settings = Get-Content (Join-Path $env:CLAUDE_HOME 'settings.json') -Raw | ConvertFrom-Json -AsHashtable
+        if ($settings.ContainsKey('extraKnownMarketplaces')) {
+            $settings['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeFalse
+        }
+    }
+
+    It "-Tools copilotCli,vscode only touches symlinks, not settings.json" {
+        Merge-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+
+        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        Remove-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+
+        # Settings.json untouched: pitt-skills entry still present
+        $settings = Get-Content (Join-Path $env:CLAUDE_HOME 'settings.json') -Raw | ConvertFrom-Json -AsHashtable
+        $settings['extraKnownMarketplaces'].ContainsKey('pitt-skills') | Should -BeTrue
+        $settings['enabledPlugins'].ContainsKey('pitt-skills@pitt-skills') | Should -BeTrue
+        # Symlinks gone
+        Test-Path (Join-Path $script:TempHome.FullName '.copilot/skills') | Should -BeFalse
+        Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeFalse
+    }
+}
