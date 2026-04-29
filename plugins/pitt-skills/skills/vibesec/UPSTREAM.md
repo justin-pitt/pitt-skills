@@ -8,3 +8,4 @@
 ## My changes
 
 - Added `license: MIT` to YAML frontmatter so the skill validates against Copilot CLI / marketplace tooling. Body content is byte-identical to upstream.
+- Renamed frontmatter `name:` from `VibeSec-Skill` to `vibesec` so the YAML field matches the skill directory (Claude/Copilot skill resolvers key on this).
