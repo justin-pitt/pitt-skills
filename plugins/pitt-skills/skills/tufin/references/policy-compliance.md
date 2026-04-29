@@ -200,7 +200,7 @@ readyForOptimization = true
 
 ## Compliance Frameworks Mapping (CDW Examples)
 
-For Justin's M&A integration runbook, the USP-as-compliance-control pattern is high leverage:
+When integrating Tufin into an M&A integration runbook, the USP-as-compliance-control pattern is high leverage:
 
 - For acquired companies, build a **scoped USP** named after the acquisition (`Acquired-CompanyA-Inbound-Restrictions`). Use it to express the temporary segmentation constraints during the integration window. Violations flag any rule that breaks the acquisition's transit policy.
 - For federal customers under CMMC Level 2, the USP can express the segregation requirements between commercial and federal workloads.

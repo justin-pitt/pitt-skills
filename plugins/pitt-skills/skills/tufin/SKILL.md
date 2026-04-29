@@ -104,7 +104,7 @@ Items added or changed in R25-1 that touch automation work:
 - **PHF1+: Dynamic polling** intervals that adjust based on revision processing time.
 - **AWS Internet Path support** via NAT Gateway in path analysis.
 
-For Justin specifically: USP zone-based exceptions and dynamic polling are PHF1+ features; CDW is on PHF3 so both are available. Confirm AWS NAT Gateway internet-path coverage if Mission Cloud onboarding hits AWS-egress access requests.
+If you're working in an environment running PHF1+, USP zone-based exceptions and dynamic polling are both available; environments on PHF3 (e.g., CDW) get them by default. Confirm AWS NAT Gateway internet-path coverage if your onboarding work hits AWS-egress access requests (e.g., Mission Cloud-style integrations).
 
 ## What Is NOT Covered Here
 
