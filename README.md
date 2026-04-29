@@ -11,9 +11,25 @@ Justin Pitt's personal collection of Claude Code and Copilot skills, distributed
 /plugin install pitt-skills@pitt-skills
 ```
 
-### For other tools (after M3)
+### For Copilot CLI / VS Code Copilot Chat
 
-See [docs/install.md](docs/install.md). One-liner install scripts coming.
+Clone the repo, then run the installer that matches your platform — it auto-detects which of `claude` / `copilot` / `code` is on `PATH` and wires up only what's installed:
+
+```bash
+# macOS / Linux
+git clone https://github.com/justin-pitt/pitt-skills.git
+./pitt-skills/scripts/install.sh
+```
+
+```powershell
+# Windows
+git clone https://github.com/justin-pitt/pitt-skills.git
+pwsh ./pitt-skills/scripts/install.ps1
+```
+
+Pass `-Tools` / `--tools` (comma-separated: `claude`, `copilotCli`, `vscode`) to override auto-detection. Re-running is safe — the installer refuses to overwrite real directories at the symlink targets and backs up `~/.claude/settings.json` to `.bak` before merging.
+
+A polished install guide with troubleshooting lands in M4.
 
 ## What's inside
 
