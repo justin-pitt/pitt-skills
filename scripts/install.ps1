@@ -147,6 +147,12 @@ function Install-CopilotChatSymlinks {
     }
 }
 
+function Test-ToolInstalled {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Name)
+    return [bool] (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
 if (-not $DotSource) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
 
@@ -163,6 +169,18 @@ if (-not $DotSource) {
             Write-Warning "Re-run with -RemoveShadowing to back them up to ~/.claude/skills/.shadow-backup-<timestamp>/ and remove the originals. Until then, the plugin version of each listed skill will not load."
         }
     }
+
+    $detected = @()
+    if (Test-ToolInstalled 'claude')  { $detected += 'claude' }
+    if (Test-ToolInstalled 'copilot') { $detected += 'copilotCli' }
+    if (Test-ToolInstalled 'code')    { $detected += 'vscode' }
+    # Auto-detect only if the caller did not explicitly pass -Tools. The param has a
+    # non-empty default, so checking $PSBoundParameters is the only way to distinguish
+    # "user picked all three" from "user did not specify".
+    if (-not $PSBoundParameters.ContainsKey('Tools')) { $Tools = $detected }
+
+    Write-Host "Detected tools: $($detected -join ', ')"
+    Write-Host "Wiring up: $($Tools -join ', ')"
 
     foreach ($tool in $Tools) {
         switch ($tool) {

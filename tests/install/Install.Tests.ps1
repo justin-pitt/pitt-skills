@@ -124,3 +124,12 @@ Describe "Install-Symlinks" {
         Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeTrue
     }
 }
+
+Describe "Test-ToolInstalled" {
+    It "Test-ToolInstalled detects pwsh" {
+        Test-ToolInstalled 'pwsh' | Should -BeTrue
+    }
+    It "Test-ToolInstalled returns false for nonexistent tool" {
+        Test-ToolInstalled 'this-does-not-exist-zzz' | Should -BeFalse
+    }
+}
