@@ -15,7 +15,7 @@ A workflow-focused marketplace by Jesse Vincent (obra) covering core Claude Code
 
 Anthropic's official skills marketplace. Provides: `docx`, `pdf`, `pptx`, `xlsx`, `frontend-design`, `skill-creator`, `mcp-builder`, `claude-api`, `webapp-testing`, and other document/artifact authoring skills.
 
-Note: `webapp-testing` was deferred here per M2's hybrid vendoring policy. Rather than vendor a copy of Anthropic's `webapp-testing` skill into pitt-skills, I install it directly from this upstream so it stays current with Anthropic's updates. The browser-testing skills I do vendor (`playwright-testing`) are author-original ports from non-Anthropic upstreams.
+Note: `webapp-testing` was deferred here per M2's hybrid vendoring policy. Rather than vendor a copy of Anthropic's `webapp-testing` skill into pitt-skills, I install it directly from this upstream so it stays current with Anthropic's updates. The browser-testing skill I do vendor (`playwright-testing`) is vendored from a separate non-Anthropic upstream (`testdino-hq/playwright-skill`); see its `UPSTREAM.md` for attribution.
 
 ```
 /plugin marketplace add anthropics/skills
