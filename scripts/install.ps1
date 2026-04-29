@@ -108,7 +108,15 @@ function New-DirectorySymlink {
     )
     $parent = Split-Path $Link -Parent
     if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    if (Test-Path $Link) { Remove-Item $Link -Recurse -Force }
+    if (Test-Path $Link) {
+        $existing = Get-Item $Link -Force
+        if ($existing.LinkType) {
+            # Stale symlink or junction — safe to remove
+            Remove-Item $Link -Force
+        } else {
+            throw "Refusing to overwrite non-symlink at '$Link'. Move or remove it manually, then re-run."
+        }
+    }
     try {
         New-Item -ItemType SymbolicLink -Path $Link -Target $Target -ErrorAction Stop | Out-Null
     } catch {
@@ -179,6 +187,11 @@ if (-not $DotSource) {
     # "user picked all three" from "user did not specify".
     if (-not $PSBoundParameters.ContainsKey('Tools')) { $Tools = $detected }
 
+    if (-not $Tools -or $Tools.Count -eq 0) {
+        Write-Warning "No tools to wire up. Pass -Tools claude,copilotCli,vscode to override auto-detection."
+        return
+    }
+
     Write-Host "Detected tools: $($detected -join ', ')"
     Write-Host "Wiring up: $($Tools -join ', ')"
 
@@ -187,6 +200,7 @@ if (-not $DotSource) {
             'claude'     { Merge-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
             'copilotCli' { Install-CopilotCliSymlinks -RepoRoot $repoRoot }
             'vscode'     { Install-CopilotChatSymlinks -RepoRoot $repoRoot }
+            default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
         }
     }
     Write-Host "Done. Restart your tool(s)."

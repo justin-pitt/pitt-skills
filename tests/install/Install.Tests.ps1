@@ -123,6 +123,19 @@ Describe "Install-Symlinks" {
         Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
         Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeTrue
     }
+
+    It "refuses to overwrite a non-symlink at the link path" {
+        $linkParent = Join-Path $script:TempHome.FullName '.copilot'
+        New-Item -ItemType Directory -Path $linkParent | Out-Null
+        $link = Join-Path $linkParent 'skills'
+        New-Item -ItemType Directory -Path $link | Out-Null
+        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+
+        { Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Throw -ExpectedMessage "*Refusing to overwrite*"
+
+        # Verify the user content was NOT deleted
+        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+    }
 }
 
 Describe "Test-ToolInstalled" {
