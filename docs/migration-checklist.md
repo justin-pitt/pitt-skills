@@ -42,7 +42,8 @@
 ### `webapp-testing`
 - **Upstream local clone:** `c:/Code/claude-skills/anthropic-skills/` (tracks `https://github.com/anthropics/skills.git`)
 - **Upstream file:** `skills/webapp-testing/SKILL.md`
-- **Diff vs `~/.claude/skills/webapp-testing/SKILL.md`:** byte-identical (no diff output). Not author-modified. Last-touching commit for the file specifically: `ef740771ac901e03fbca3ce4e1c453a96010f30a`; HEAD listed in the table is the repo head. Port without `UPSTREAM.md`.
+- **Diff vs `~/.claude/skills/webapp-testing/SKILL.md`:** byte-identical (no diff output). Not author-modified. Last-touching commit for the file specifically: `ef740771ac901e03fbca3ce4e1c453a96010f30a`; HEAD listed in the table is the repo head.
+- **M2 disposition: deferred to catalog (Task 17), NOT vendored under Task 16.** Per the hybrid vendor-vs-catalog policy decided 2026-04-29 (see `docs/plans/2026-04-28-pitt-skills-marketplace.md`), `anthropics/skills` is a large multi-skill marketplace; cataloging it as a reference avoids duplicating Anthropic's curated set into our plugin. Task 16's commit therefore only records this deferral.
 
 ### `cortex-xsiam`, `tines`, `tufin`
 - Author-original skills (Justin's own work). Not vendored from any upstream repository.
@@ -51,8 +52,17 @@
 
 ## Vendoring decision summary
 
-All 5 upstream-derived skills (`owasp-security`, `playwright-testing`, `ui-ux-guide`, `vibesec`, `webapp-testing`) are byte-identical to their upstreams. Per the plan (Task 17 + line 421 of `2026-04-28-pitt-skills-marketplace.md`), **none of them require an `UPSTREAM.md`**. The plan's "skip unmodified — reference don't vendor" rule applies — they go in `catalog/upstream.md` (Task 17) rather than being copied into `plugins/pitt-skills/skills/`.
+All 5 upstream-derived skills (`owasp-security`, `playwright-testing`, `ui-ux-guide`, `vibesec`, `webapp-testing`) are byte-identical to their upstreams. Per the **hybrid vendor-vs-catalog policy** recorded in the plan on 2026-04-29:
+
+- **Small single-skill repos → vendor with minimal `UPSTREAM.md`.** Applies to `owasp-security`, `playwright-testing`, `ui-ux-guide`, `vibesec` (Tasks 12–15). Vendoring preserves attribution while keeping the installer one-shot.
+- **Large multi-skill marketplaces → catalog reference only.** Applies to `webapp-testing` (from `anthropics/skills`). Deferred to Task 17 catalog rather than vendored under Task 16.
 
 The 3 author-original skills (`cortex-xsiam`, `tines`, `tufin`) are first-party content; they get vendored under Tasks 16a/b/c without `UPSTREAM.md` and have no catalog entry.
 
 If, during the per-skill port tasks, an executor finds a delta missed here (e.g., line-ending or whitespace differences `diff -q` flagged as identical), they should re-run a byte-level comparison and update this file before committing the port.
+
+## Deferred to catalog
+
+| Skill | Reason | Tracked under |
+|---|---|---|
+| `webapp-testing` | Lives in `anthropics/skills` multi-skill marketplace; cataloging avoids duplicating Anthropic's curated set. | Task 17 |
