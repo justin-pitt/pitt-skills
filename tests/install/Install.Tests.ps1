@@ -97,3 +97,52 @@ Describe "Remove-ShadowingSkills" {
         $sentinel.Trim() | Should -Be 'sentinel'
     }
 }
+
+Describe "Install-Symlinks" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "creates ~/.copilot/skills symlink to repo's skills dir" {
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
+        Test-Path $link | Should -BeTrue
+        (Get-Item $link).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills'
+    }
+
+    It "creates ~/.copilot/instructions symlink to repo's .github/instructions" {
+        Install-CopilotChatSymlinks -RepoRoot $script:RepoRoot
+        Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeTrue
+    }
+
+    It "refuses to overwrite a non-symlink at the link path" {
+        $linkParent = Join-Path $script:TempHome.FullName '.copilot'
+        New-Item -ItemType Directory -Path $linkParent | Out-Null
+        $link = Join-Path $linkParent 'skills'
+        New-Item -ItemType Directory -Path $link | Out-Null
+        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+
+        { Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Throw -ExpectedMessage "*Refusing to overwrite*"
+
+        # Verify the user content was NOT deleted
+        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+    }
+}
+
+Describe "Test-ToolInstalled" {
+    It "Test-ToolInstalled detects pwsh" {
+        Test-ToolInstalled 'pwsh' | Should -BeTrue
+    }
+    It "Test-ToolInstalled returns false for nonexistent tool" {
+        Test-ToolInstalled 'this-does-not-exist-zzz' | Should -BeFalse
+    }
+}

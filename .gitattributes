@@ -1,0 +1,11 @@
+# Disable git's CRLF normalization for build-test fixtures.
+# These files are byte-exact golden fixtures: their interior newlines are LF and the
+# trailing newline is CRLF (matching what `Set-Content` produces under Windows pwsh).
+# Letting `core.autocrlf=true` rewrite them would break the byte-for-byte diff in
+# tests/build/Build.Tests.ps1.
+tests/build/fixtures/** -text
+
+# Shell scripts must be LF on every platform — Git for Windows would otherwise
+# convert them to CRLF on checkout under core.autocrlf=true, breaking bash.
+*.sh text eol=lf
+*.bats text eol=lf
