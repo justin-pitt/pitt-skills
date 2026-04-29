@@ -5,6 +5,7 @@
 setup() {
     export TEST_HOME="$(mktemp -d)"
     export ORIG_HOME="$HOME"
+    export ORIG_PATH="$PATH"
     export HOME="$TEST_HOME"
     export REPO_ROOT="$(git rev-parse --show-toplevel)"
 
@@ -22,6 +23,7 @@ STUB
 
 teardown() {
     export HOME="$ORIG_HOME"
+    export PATH="$ORIG_PATH"
     rm -rf "$TEST_HOME"
 }
 
@@ -37,6 +39,8 @@ teardown() {
     [ -f "$HOME/.claude/settings.json.bak" ]
     grep -q "pitt-skills" "$HOME/.claude/settings.json"
     grep -q "dark" "$HOME/.claude/settings.json"
+    # Atomic-mv post-condition: no stray .tmp file
+    [ ! -f "$HOME/.claude/settings.json.tmp" ]
 }
 
 @test "install.sh refuses to overwrite a non-symlink at the link path" {

@@ -19,10 +19,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $WHATIF -eq 1 ]]; then
-    echo "--what-if: not yet implemented (reserved for M4)" >&2
+    echo "--what-if: ignored; performing real install (planned for M4)" >&2
 fi
 if [[ $UNINSTALL -eq 1 ]]; then
-    echo "--uninstall: not yet implemented (reserved for M4)" >&2
+    echo "--uninstall: ignored; performing real install (planned for M4)" >&2
 fi
 
 merge_claude_settings() {
@@ -77,7 +77,7 @@ for tool in "${TOOL_LIST[@]}"; do
             if command -v claude >/dev/null 2>&1; then
                 merge_claude_settings
             else
-                echo "claude not installed, skipping"
+                echo "claude not installed, skipping" >&2
             fi
             ;;
         copilotCli) install_copilot_cli ;;
