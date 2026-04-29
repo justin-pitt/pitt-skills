@@ -54,7 +54,10 @@ Describe "Get-ShadowingSkills" {
 
     It "returns empty when ~/.claude/skills does not exist" {
         $repoRoot = "$($script:TempHome.FullName)/fake-repo"
-        Get-ShadowingSkills -RepoRoot $repoRoot | Should -BeNullOrEmpty
+        $result = Get-ShadowingSkills -RepoRoot $repoRoot
+        $result | Should -BeNullOrEmpty
+        $result -is [array] | Should -BeTrue
+        $result.Count | Should -Be 0
     }
 
     It "returns names that exist in both standalone and plugin" {
@@ -62,6 +65,8 @@ Describe "Get-ShadowingSkills" {
         New-Item -ItemType Directory -Path "$($script:TempHome.FullName)/skills/unrelated-skill" | Out-Null
         $repoRoot = "$($script:TempHome.FullName)/fake-repo"
         $shadowing = Get-ShadowingSkills -RepoRoot $repoRoot
+        $shadowing -is [array] | Should -BeTrue
+        $shadowing.Count | Should -Be 1
         $shadowing | Should -Contain 'threatconnect-polarity'
         $shadowing | Should -Not -Contain 'unrelated-skill'
         $shadowing | Should -Not -Contain 'owasp-security'  # not standalone, only plugin

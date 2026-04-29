@@ -48,15 +48,16 @@ function Get-ShadowingSkills {
         [Parameter(Mandatory)] [string] $RepoRoot
     )
     $standaloneDir = Join-Path (Get-ClaudeHome) 'skills'
-    if (-not (Test-Path $standaloneDir)) { return @() }
+    if (-not (Test-Path $standaloneDir)) { return ,@() }
 
     $pluginSkillsDir = Join-Path $RepoRoot 'plugins/pitt-skills/skills'
-    if (-not (Test-Path $pluginSkillsDir)) { return @() }
+    if (-not (Test-Path $pluginSkillsDir)) { return ,@() }
 
     $pluginNames = Get-ChildItem $pluginSkillsDir -Directory | Select-Object -ExpandProperty Name
     $standaloneNames = Get-ChildItem $standaloneDir -Directory | Select-Object -ExpandProperty Name
 
-    return @($standaloneNames | Where-Object { $pluginNames -contains $_ })
+    $result = @($standaloneNames | Where-Object { $pluginNames -contains $_ })
+    return ,$result
 }
 
 function Remove-ShadowingSkills {
