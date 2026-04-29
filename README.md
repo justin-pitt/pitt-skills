@@ -2,34 +2,34 @@
 
 Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace and (after Milestone 3) as Copilot Chat instructions.
 
-## Quick install
+## Quick install — paste into your AI assistant
 
-### For Claude Code
+### Universal prompt (works in any of: Claude Code, Copilot CLI, Copilot Chat, Copilot Desktop)
 
-```
-/plugin marketplace add justin-pitt/pitt-skills
-/plugin install pitt-skills@pitt-skills
-```
+> Clone `https://github.com/justin-pitt/pitt-skills` into `~/Code/pitt-skills` (or `%USERPROFILE%\Code\pitt-skills` on Windows). After cloning, run `./scripts/install.ps1` on Windows or `./scripts/install.sh` on macOS/Linux. Show me the installer's summary output, then tell me which tools were detected and wired up. If anything failed, propose a fix before retrying.
 
-### For Copilot CLI / VS Code Copilot Chat
+Append one of these depending on your tool:
+- **Claude Code:** "When done, also tell me to restart Claude Code so the new pitt-skills marketplace gets registered."
+- **Copilot CLI:** "When done, run `/skills reload` and confirm pitt-skills entries appear."
+- **VS Code Copilot Chat:** "When done, remind me to reload the VS Code window (Ctrl+Shift+P → Developer: Reload Window)."
+- **Copilot Desktop App:** "When done, remind me to fully quit and reopen the Copilot desktop app."
 
-Clone the repo, then run the installer that matches your platform — it auto-detects which of `claude` / `copilot` / `code` is on `PATH` and wires up only what's installed:
+## Manual install
 
 ```bash
-# macOS / Linux
-git clone https://github.com/justin-pitt/pitt-skills.git
-./pitt-skills/scripts/install.sh
+git clone https://github.com/justin-pitt/pitt-skills ~/Code/pitt-skills
+cd ~/Code/pitt-skills
+pwsh ./scripts/install.ps1     # Windows
+./scripts/install.sh           # macOS / Linux
 ```
 
-```powershell
-# Windows
-git clone https://github.com/justin-pitt/pitt-skills.git
-pwsh ./pitt-skills/scripts/install.ps1
+## VS Code Chat — manual fallback (no symlinks)
+
+If your environment blocks symlinks, add to your VS Code user settings.json:
+```json
+"chat.instructionsFilesLocations": ["${userHome}/Code/pitt-skills/.github/instructions"],
+"chat.promptFilesLocations": ["${userHome}/Code/pitt-skills/.github/prompts"]
 ```
-
-Pass `-Tools` / `--tools` (comma-separated: `claude`, `copilotCli`, `vscode`) to override auto-detection. Re-running is safe — the installer refuses to overwrite real directories at the symlink targets and backs up `~/.claude/settings.json` to `.bak` before merging.
-
-A polished install guide with troubleshooting lands in M4.
 
 ## What's inside
 
