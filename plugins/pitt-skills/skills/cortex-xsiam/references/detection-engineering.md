@@ -85,7 +85,7 @@ dataset = xdr_data
 ## BIOC Rules
 
 ### Overview
-Behavioral Indicator of Compromise rules detect endpoint behaviors — tactics, techniques, and procedures — rather than static indicators. They match on process, file, registry, and network activity.
+Behavioral Indicator of Compromise rules detect endpoint behaviors (tactics, techniques, and procedures) rather than static indicators. They match on process, file, registry, and network activity.
 
 ### Creating a BIOC Rule
 Navigate to: **Detection & Threat Intel → Detection Rules → BIOC → Create**
@@ -131,7 +131,7 @@ Analytical Behavioral Indicators of Compromise use machine learning to:
 - Detect anomalies that deviate from established patterns
 - Generate Analytics alerts when the Analytics Engine identifies anomalous behavior
 
-ABIOCs analyze data as it streams into the tenant, including firewall data forwarded via Cortex Data Lake. They are managed by Palo Alto and continuously updated — no user configuration required for built-in ABIOCs.
+ABIOCs analyze data as it streams into the tenant, including firewall data forwarded via Cortex Data Lake. They are managed by Palo Alto and continuously updated; no user configuration required for built-in ABIOCs.
 
 ## Alert Tuning
 
@@ -179,7 +179,7 @@ XSIAM includes a **MITRE ATT&CK Framework Coverage Dashboard** showing which tec
 2. **Test in Query Builder first**: Validate that your query returns expected results with real data before creating the rule
 3. **Map alert fields**: Always configure alert field mappings for hostname, username, and IP at minimum
 4. **Set appropriate suppression**: Balance between alert fatigue and detection coverage
-5. **Use real-time when eligible**: XSIAM will recommend real-time mode if the query qualifies — prefer it for lower detection latency
+5. **Use real-time when eligible**: XSIAM will recommend real-time mode if the query qualifies; prefer it for lower detection latency
 6. **Version and document**: Use comments in XQL and descriptive rule names; consider exporting rules for version control
 7. **Tune iteratively**: Review alert volume weekly, adjust thresholds, and add exclusions as needed
 8. **Map to MITRE ATT&CK**: Enables coverage analysis and reporting

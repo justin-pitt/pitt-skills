@@ -1,8 +1,12 @@
 # Case Operations Reference
 
-> **CDW Terminology Note**: This document uses "case" where Palo Alto's default documentation says "incident." At CDW, SOC analysts work out of **cases** and **issues** — not incidents. Low severity alerts only surface when high+ severity alerts correlate them into existing cases. The underlying APIs still use "incident" in endpoint paths and function names (e.g., `/incidents/get_incidents`) — these are preserved as-is in the API section below.
+> **Terminology Note**: This document uses "case" where Palo Alto's default documentation says "incident." In modern XSIAM, SOC analysts work out of **cases** and **issues** - not incidents. The underlying APIs still use "incident" in endpoint paths and function names (e.g., `/incidents/get_incidents`) - these are preserved as-is in the API section below.
 >
-> **TODO**: Define the distinction between "case" and "issue" in CDW's XSIAM environment.
+> **Quick refresher** - see [SKILL.md](../SKILL.md) (Terminology Note) for the verified definitions:
+> - **Issue** = a detection event surfaced on the Issues page from any detection method (correlation, BIOC, ABIOC, IOC, analytics, ASM, vulnerability, custom). Lives in the `issues` dataset.
+> - **Case** = top-level grouping of related issues; the primary working object for SOC analysts. AI-grouped by shared entities and attack patterns. Has `case_id` and an `issues` array.
+> - **Alert** vs **Issue**: alerts (older XDR surface) and issues (modern XSIAM surface) are both detection events with overlapping IDs but different field shapes. Most analyst triage starts at the Issues page.
+> - **Case** vs **Incident**: separate at the API level, both still active. Cases bridge to incidents via `custom_fields.incident_id`. Don't conflate them.
 
 ## Table of Contents
 1. [Case Lifecycle](#case-lifecycle)
@@ -44,23 +48,23 @@
 
 ### How Alerts Become Cases
 XSIAM groups related alerts into cases using:
-- **Intelligent stitching** — correlates alerts by common entities (endpoint, user, IP, process)
-- **AI-driven scoring** — assigns severity based on risk analysis
-- **Automatic enrichment** — adds context from threat intelligence, asset inventory, user profiles
+- **Intelligent stitching** - correlates alerts by common entities (endpoint, user, IP, process)
+- **AI-driven scoring** - assigns severity based on risk analysis
+- **Automatic enrichment** - adds context from threat intelligence, asset inventory, user profiles
 
 ### Case Fields
 Key case attributes:
-- **Case ID** — unique identifier
-- **Severity** — Critical, High, Medium, Low, Informational
-- **Status** — New, Under Investigation, Resolved, Closed
-- **Assigned To** — analyst or group
-- **Source** — where the alert originated
-- **Alert Count** — number of grouped alerts
-- **MITRE Tactic/Technique** — mapped ATT&CK classification
+- **Case ID** - unique identifier
+- **Severity** - Critical, High, Medium, Low, Informational
+- **Status** - New, Under Investigation, Resolved, Closed
+- **Assigned To** - analyst or group
+- **Source** - where the alert originated
+- **Alert Count** - number of grouped alerts
+- **MITRE Tactic/Technique** - mapped ATT&CK classification
 
 ### Alert vs Case
 - **Alert**: Single detection event from one rule/engine
-- **Case**: Grouped collection of related alerts telling a complete attack story. This is the primary working object for SOC analysts at CDW.
+- **Case**: Grouped collection of related alerts telling a complete attack story. The primary working object for SOC analysts.
 
 ## Causality Chain & Views
 
@@ -141,26 +145,44 @@ Based on findings, execute containment and remediation (see Response Actions bel
 
 ## Response Actions
 
+### Action Center - the unifying surface
+
+All endpoint and file response actions route through the **Action Center** (admin doc section 7.4). It's the single place to:
+- See in-flight actions across endpoints with pending/in-progress/completed/cancelled status
+- Cancel an action that hasn't yet executed on the endpoint
+- View the **action report** post-completion (output, exit code, file artifacts)
+- Track the action lifecycle for compliance/forensic logging
+
+Action lifecycle: `pending` → `in_progress` (agent picked up) → `completed` / `failed` / `cancelled`. Poll status via the `/actions/get_action_status` API endpoint. Each action has an `action_id` that bridges the API and UI surfaces.
+
+Distinct from playbooks - a playbook can *trigger* an action, but the action itself is tracked in Action Center independently. If a playbook task that runs an action errors, the underlying action may still complete on the endpoint.
+
 ### Endpoint Actions
 | Action | Command | Effect |
 |---|---|---|
-| **Isolate Endpoint** | `!xdr-isolate-endpoint` | Network isolation — endpoint can only communicate with XSIAM cloud |
+| **Isolate Endpoint** | `!xdr-isolate-endpoint` | Network isolation - endpoint can only communicate with XSIAM cloud |
 | **Unisolate Endpoint** | `!xdr-unisolate-endpoint` | Restore network connectivity |
+| **Pause Protection** | Action Center → Pause Protection | Temporarily disable agent-side prevention (does not affect detection) - useful for incident response on a host running a critical app you can't yet fix the policy for |
+| **Remediate Changes** | Action Center → Remediate Changes from Malicious Activity | Roll back file/registry/persistence changes attributed to a specific malicious causality chain (admin doc section 7.6) |
 | **Kill Process** | Via live terminal or playbook | Terminate running malicious process |
 | **Quarantine File** | Via endpoint agent or playbook | Move file to quarantine |
 | **Delete File** | Via live terminal or playbook | Remove malicious file |
-| **Retrieve File** | `!xdr-file-retrieve` | Download file from endpoint for analysis |
+| **Retrieve File** | `!xdr-file-retrieve` | Download file from endpoint for analysis. Status via the `/file_retrieval/get_file_retrieval_details` endpoint. |
+| **Collect Memory Image** | Action Center → Collect Memory Image | Full live RAM dump for forensic analysis. Large files; staged to cloud bucket post-collection. |
+| **Search and Destroy** | Action Center → Search and Destroy | Match-and-remove files by hash/path across the fleet. Audit trail per host. |
+| **Retrieve Logs** | Action Center → Retrieve Logs | Pull XDR agent logs from endpoint for support cases |
 | **Scan Endpoint** | `!xdr-scan-endpoints` | Trigger full malware scan |
-| **Run Script** | `!xdr-run-script` | Execute remediation script on endpoint |
+| **Run Script** | `!xdr-run-script` | Execute remediation script on endpoint. Status via the `/scripts/get_script_execution_status` endpoint; output via `/scripts/get_script_execution_results` (and `_files` for files produced). |
 | **Execute Command** | `!core-execute-command` | Run shell command on endpoint |
+| **External Dynamic Lists** | Action Center → EDLs | Generate per-tenant EDL URLs that the NGFW can subscribe to for IOC propagation |
 
 ### Network Actions
 | Action | Effect |
 |---|---|
-| **Block IP** | `!core-block-ip` — Add to blocklist across enforcement points |
+| **Block IP** | `!core-block-ip` - Add to blocklist across enforcement points |
 | **Block Domain** | Add to External Dynamic List (EDL) on NGFW |
-| **Block Hash** | `!xdr-file-blacklist` — Prevent execution of file by hash |
-| **Whitelist Hash** | `!xdr-file-whitelist` — Allow known-good file |
+| **Block Hash** | `!xdr-file-blacklist` - Prevent execution of file by hash |
+| **Whitelist Hash** | `!xdr-file-whitelist` - Allow known-good file |
 
 ### Identity Actions
 | Action | Effect |
@@ -173,16 +195,16 @@ Based on findings, execute containment and remediation (see Response Actions bel
 
 ### Predefined Dashboards
 XSIAM includes several built-in dashboards that display when you log in:
-- **Security Operations** — Overall SOC metrics
-- **Case Management** — Open cases, MTTR, resolution rates *(UI may label this "Incident Management")*
-- **Data Ingestion** — Volume, sources, errors, lag
-- **MITRE ATT&CK Coverage** — Detection coverage mapped to framework
-- **IT Metrics** — Endpoint health, agent status
-- **Risk Management** — (with ITDR add-on) User and host risk scores
+- **Security Operations** - Overall SOC metrics
+- **Case Management** - Open cases, MTTR, resolution rates *(UI may label this "Incident Management")*
+- **Data Ingestion** - Volume, sources, errors, lag
+- **MITRE ATT&CK Coverage** - Detection coverage mapped to framework
+- **IT Metrics** - Endpoint health, agent status
+- **Risk Management** - (with ITDR add-on) User and host risk scores
 
 ### Custom Dashboards
 Build custom dashboards with:
-- **XQL-powered widgets** — any XQL query can become a dashboard widget
+- **XQL-powered widgets** - any XQL query can become a dashboard widget
 - **Widget types**: Tables, bar charts, pie charts, line charts, numbers, trend graphs
 - **Filters**: Time range, data source, custom fields
 - **Sharing**: Share with team or set as default landing page
@@ -195,13 +217,13 @@ Build custom dashboards with:
 5. Select XQL widget type and reference your saved query
 
 ### Reports
-- **Scheduled reports** — PDF/email reports on a schedule
-- **Compliance reports** — pre-built templates for regulatory requirements
-- **Custom reports** — build from dashboard widgets
+- **Scheduled reports** - PDF/email reports on a schedule
+- **Compliance reports** - pre-built templates for regulatory requirements
+- **Custom reports** - build from dashboard widgets
 
 ## XSIAM APIs
 
-> **API Terminology**: The API endpoints use Palo Alto's native "incident" naming. When calling these APIs, you are operating on what CDW calls "cases."
+> **API Terminology**: The API endpoints use Palo Alto's native "incident" naming. When calling these APIs, you are operating on what analysts work with as "cases."
 
 ### API Authentication
 Generate API keys in: Settings → Configurations → Integrations → API Keys
@@ -273,13 +295,13 @@ results = requests.post(results_url, json=results_payload, headers=headers)
 
 ## Operational Best Practices
 
-1. **Set up dashboards for daily ops** — monitor case volume, MTTR, data ingestion health, and detection coverage
-2. **Automate routine cases** — configure playbooks to auto-close well-understood, low-risk alert types
-3. **Review and tune weekly** — analyze false positive rates, adjust alert exclusions, and refine correlation rules
-4. **Use the MITRE ATT&CK dashboard** — identify coverage gaps and prioritize new detection rule development
-5. **Document investigation playbooks** — standardize investigation procedures for common case types
-6. **Leverage XQL for proactive hunting** — schedule regular threat hunts beyond automated detections
-7. **Monitor data ingestion health** — gaps in data ingestion lead to gaps in detection
-8. **Practice response actions** — regularly test endpoint isolation, file quarantine, and recovery procedures
-9. **Maintain an asset inventory** — keep the endpoints list current for accurate scoping during cases
-10. **Track SOC metrics** — MTTD (Mean Time to Detect), MTTR (Mean Time to Respond), case closure rate, false positive rate
+1. **Set up dashboards for daily ops** - monitor case volume, MTTR, data ingestion health, and detection coverage
+2. **Automate routine cases** - configure playbooks to auto-close well-understood, low-risk alert types
+3. **Review and tune weekly** - analyze false positive rates, adjust alert exclusions, and refine correlation rules
+4. **Use the MITRE ATT&CK dashboard** - identify coverage gaps and prioritize new detection rule development
+5. **Document investigation playbooks** - standardize investigation procedures for common case types
+6. **Leverage XQL for proactive hunting** - schedule regular threat hunts beyond automated detections
+7. **Monitor data ingestion health** - gaps in data ingestion lead to gaps in detection
+8. **Practice response actions** - regularly test endpoint isolation, file quarantine, and recovery procedures
+9. **Maintain an asset inventory** - keep the endpoints list current for accurate scoping during cases
+10. **Track SOC metrics** - MTTD (Mean Time to Detect), MTTR (Mean Time to Respond), case closure rate, false positive rate

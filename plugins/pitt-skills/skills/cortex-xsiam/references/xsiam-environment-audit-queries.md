@@ -7,7 +7,7 @@
 
 ## 1. Playbook & Automation Audit
 
-### 1.1 — Alert Types With vs. Without Playbook Coverage
+### 1.1: Alert Types With vs. Without Playbook Coverage
 ```xql
 // Which alert sources are generating work and do they have automation?
 // Run this first to find your biggest automation gaps
@@ -20,7 +20,7 @@ dataset = alerts
 | limit 100
 ```
 
-### 1.2 — Alert Volume by Severity (Last 30 Days)
+### 1.2: Alert Volume by Severity (Last 30 Days)
 ```xql
 // Understand the shape of your alert load
 // High volume + low severity = automation candidates
@@ -30,7 +30,7 @@ dataset = alerts
 | sort alert_count desc
 ```
 
-### 1.3 — Top 20 Noisiest Alert Names
+### 1.3: Top 20 Noisiest Alert Names
 ```xql
 // These are your top tuning or automation targets
 // Cross-reference with SOC lead to confirm which are pain points
@@ -44,7 +44,7 @@ dataset = alerts
 | limit 20
 ```
 
-### 1.4 — Alert Volume Trend by Hour (Spot Spikes & Patterns)
+### 1.4: Alert Volume Trend by Hour (Spot Spikes & Patterns)
 ```xql
 // Look for recurring spikes that indicate noisy rules or scheduled scans
 dataset = alerts
@@ -53,7 +53,7 @@ dataset = alerts
 | sort _time asc
 ```
 
-### 1.5 — Alerts That Never Became Cases
+### 1.5: Alerts That Never Became Cases
 ```xql
 // These alerts fire but don't correlate into cases
 // Either they're low-severity noise or the grouping logic isn't catching them
@@ -69,16 +69,18 @@ dataset = alerts
 
 ## 2. Detection Rules Audit
 
-### 2.1 — Correlation Rule Change History
+### 2.1: Correlation Rule Change History
+> **Note**: The `correlationsauditing` dataset is unavailable in some tenants. If this query errors with "dataset not found," fall back to exporting the rule list from the UI: Detection & Threat Intel → Detection Rules → Correlations.
+
 ```xql
-// Who changed what and when — audit trail for all rule modifications
+// Who changed what and when: audit trail for all rule modifications
 dataset = correlationsauditing
 | fields _time, rule_name, action, user_name, status
 | sort _time desc
 | limit 200
 ```
 
-### 2.2 — Correlation Rules by Alert Volume (Find Noisy & Silent Rules)
+### 2.2: Correlation Rules by Alert Volume (Find Noisy & Silent Rules)
 ```xql
 // High-volume rules need tuning or suppression
 // Zero-volume rules may be broken or targeting missing data
@@ -93,7 +95,7 @@ dataset = alerts
 | sort alert_count desc
 ```
 
-### 2.3 — Rules Approaching Auto-Disable Threshold
+### 2.3: Rules Approaching Auto-Disable Threshold
 ```xql
 // XSIAM auto-disables rules at 5,000 hits/24h
 // Find rules trending toward that limit
@@ -105,7 +107,7 @@ dataset = alerts
 | sort hits_24h desc
 ```
 
-### 2.4 — BIOC Rule Alert Inventory
+### 2.4: BIOC Rule Alert Inventory
 ```xql
 // Separate BIOC signal from correlation rule signal
 dataset = alerts
@@ -117,7 +119,7 @@ dataset = alerts
 | sort alert_count desc
 ```
 
-### 2.5 — Alert Sources Summary (All Detection Types)
+### 2.5: Alert Sources Summary (All Detection Types)
 ```xql
 // Full picture: what's generating alerts and how much
 dataset = alerts
@@ -132,9 +134,9 @@ dataset = alerts
 
 ## 3. Case & SOC Workflow Audit
 
-### 3.1 — Case Volume and Resolution Metrics
+### 3.1: Case Volume and Resolution Metrics
 ```xql
-// Baseline MTTR and case volume — you'll use this to show automation impact later
+// Baseline MTTR and case volume: you'll use this to show automation impact later
 dataset = incidents
 | filter _time >= subtract(current_time(), to_integer("30d"))
 | comp count() as case_count,
@@ -143,7 +145,7 @@ dataset = incidents
 | sort case_count desc
 ```
 
-### 3.2 — Cases by Status (Open vs. Closed Backlog)
+### 3.2: Cases by Status (Open vs. Closed Backlog)
 ```xql
 // How many cases are sitting open? Is there a backlog?
 dataset = incidents
@@ -152,7 +154,7 @@ dataset = incidents
 | sort case_count desc
 ```
 
-### 3.3 — Cases by Assigned Analyst (Workload Distribution)
+### 3.3: Cases by Assigned Analyst (Workload Distribution)
 ```xql
 // See if work is evenly distributed or if certain analysts are overloaded
 dataset = incidents
@@ -162,7 +164,7 @@ dataset = incidents
 | sort open_cases desc
 ```
 
-### 3.4 — Case Close Reasons (False Positive Rate)
+### 3.4: Case Close Reasons (False Positive Rate)
 ```xql
 // High FP rate = detection tuning needed
 // This directly feeds your tuning backlog
@@ -173,7 +175,7 @@ dataset = incidents
 | sort case_count desc
 ```
 
-### 3.5 — Alerts Per Case (Grouping Quality Check)
+### 3.5: Alerts Per Case (Grouping Quality Check)
 ```xql
 // Very high alert-per-case ratios may indicate over-grouping
 // Very low (1:1) may indicate under-grouping
@@ -189,7 +191,7 @@ dataset = incidents
 
 ## 4. Data Pipeline Health Audit
 
-### 4.1 — Data Sources Inventory (What's Flowing)
+### 4.1: Data Sources Inventory (What's Flowing)
 ```xql
 // Master list of everything ingesting into the tenant
 // Cross-reference against expected sources
@@ -201,9 +203,9 @@ dataset = xdr_data
 | sort event_count desc
 ```
 
-### 4.2 — Data Source Freshness Check
+### 4.2: Data Source Freshness Check
 ```xql
-// Find sources that have gone silent — gap = detection blind spot
+// Find sources that have gone silent: gap = detection blind spot
 // Any source with last_seen > 24h ago needs investigation
 dataset = xdr_data
 | comp max(_time) as last_event by _vendor, _product
@@ -211,16 +213,16 @@ dataset = xdr_data
 | sort hours_since_last desc
 ```
 
-### 4.3 — Data Volume by Source (Last 7 Days, Daily)
+### 4.3: Data Volume by Source (Last 7 Days, Daily)
 ```xql
-// Look for volume drops — a 50% drop often means a broken feed
+// Look for volume drops: a 50% drop often means a broken feed
 dataset = xdr_data
 | filter _time >= subtract(current_time(), to_integer("7d"))
 | comp count() as event_count by _vendor, _product, bin(_time, 1d)
 | sort _vendor, _product, _time
 ```
 
-### 4.4 — XDM Coverage Check (Which Sources Are Normalized)
+### 4.4: XDM Coverage Check (Which Sources Are Normalized)
 ```xql
 // Sources without XDM mapping don't benefit from cross-source analytics
 // Run this per dataset to check XDM field population
@@ -235,7 +237,7 @@ datamodel dataset = xdr_data
 | sort event_count desc
 ```
 
-### 4.5 — Endpoint Agent Health
+### 4.5: Endpoint Agent Health
 ```xql
 // Find endpoints with stale heartbeats or disconnected status
 dataset = endpoints
@@ -245,7 +247,7 @@ dataset = endpoints
 | limit 200
 ```
 
-### 4.6 — Endpoint Coverage Summary
+### 4.6: Endpoint Coverage Summary
 ```xql
 // How many endpoints are healthy vs. disconnected vs. lost
 dataset = endpoints
@@ -257,7 +259,7 @@ dataset = endpoints
 
 ## 5. Indicator & Threat Intel Audit
 
-### 5.1 — IOC Match Activity
+### 5.1: IOC Match Activity
 ```xql
 // Are IOC matching rules actually finding hits?
 dataset = alerts
@@ -267,7 +269,7 @@ dataset = alerts
 | sort alert_count desc
 ```
 
-### 5.2 — Indicator Volume and Types
+### 5.2: Indicator Volume and Types
 ```xql
 // What types of indicators are loaded and how many
 // This tells you if ThreatConnect feed ingestion is working
@@ -307,21 +309,21 @@ These are CLI commands to run in the **Playground** (Incident Response → Inves
 
 ## 7. Content Pack & Marketplace Audit
 
-### 7.1 — Check Marketplace for Pending Updates
+### 7.1: Check Marketplace for Pending Updates
 Navigate to: **Settings → Configurations → Content Management → Marketplace**
 - Filter by "Updates Available"
 - Note any packs with updates for CrowdStrike, ThreatConnect, ServiceNow, Prisma Cloud
 
-### 7.2 — Installed Content Packs
+### 7.2: Installed Content Packs
 Navigate to: **Settings → Configurations → Content Management → Installed Content Packs**
 - Document what's installed
-- Cross-reference against your tool stack — are there packs for tools you use that aren't installed?
+- Cross-reference against your tool stack: are there packs for tools you use that aren't installed?
 
 ---
 
 ## 8. Management Audit Log (Admin Activity)
 
-### 8.1 — Recent Admin Actions
+### 8.1: Recent Admin Actions
 ```xql
 // Track who's making changes to the platform
 // Useful for change management and troubleshooting
@@ -337,11 +339,11 @@ dataset = audits
 
 ## Priority Order for Running These
 
-1. **4.1 + 4.2** — Data Source Inventory & Freshness (know what you're working with)
-2. **1.3** — Noisiest Alerts (find the SOC's biggest pain points)
-3. **2.2** — Correlation Rule Volume (find noisy and silent rules)
-4. **3.1 + 3.4** — Case Metrics & FP Rate (baseline for improvement)
-5. **4.5 + 4.6** — Endpoint Health (know your agent coverage)
-6. **1.1** — Alert-to-Playbook Coverage Map (find automation gaps)
-7. **5.1** — IOC Match Activity (verify TI is working)
-8. **Playground commands** — Integration Health Checks
+1. **4.1 + 4.2**: Data Source Inventory & Freshness (know what you're working with)
+2. **1.3**: Noisiest Alerts (find the SOC's biggest pain points)
+3. **2.2**: Correlation Rule Volume (find noisy and silent rules)
+4. **3.1 + 3.4**: Case Metrics & FP Rate (baseline for improvement)
+5. **4.5 + 4.6**: Endpoint Health (know your agent coverage)
+6. **1.1**: Alert-to-Playbook Coverage Map (find automation gaps)
+7. **5.1**: IOC Match Activity (verify TI is working)
+8. **Playground commands**: Integration Health Checks

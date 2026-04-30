@@ -2,26 +2,122 @@
 
 ## Table of Contents
 1. [Overview](#overview)
-2. [Authentication](#authentication)
-3. [API Request/Response Pattern](#api-requestresponse-pattern)
-4. [API Endpoint Catalog](#api-endpoint-catalog)
-5. [XQL Query APIs](#xql-query-apis)
-6. [Event Collector Integrations](#event-collector-integrations)
-7. [Mirroring Integration Pattern](#mirroring-integration-pattern)
-8. [Integration Cache](#integration-cache)
-9. [Long-Running Containers](#long-running-containers)
-10. [Docker Image Management](#docker-image-management)
-11. [Python Client Pattern](#python-client-pattern)
-12. [API Licensing](#api-licensing)
-13. [Documentation References](#documentation-references)
+2. [API Quirks & Gotchas](#api-quirks--gotchas)
+3. [Authentication](#authentication)
+4. [API Request/Response Pattern](#api-requestresponse-pattern)
+5. [API Endpoint Catalog](#api-endpoint-catalog)
+6. [XQL Query APIs](#xql-query-apis)
+7. [Event Collector Integrations](#event-collector-integrations)
+8. [Mirroring Integration Pattern](#mirroring-integration-pattern)
+9. [Integration Cache](#integration-cache)
+10. [Long-Running Containers](#long-running-containers)
+11. [Docker Image Management](#docker-image-management)
+12. [Python Client Pattern](#python-client-pattern)
+13. [API Licensing](#api-licensing)
+14. [Documentation References](#documentation-references)
 
 ---
 
 ## Overview
 
-This reference covers the XSIAM platform API and advanced integration patterns: authentication, the XQL query API async flow, event collector integrations, bidirectional mirroring, long-running containers, and integration caching. For basic integration code conventions (Client class, CommandResults, YAML metadata), see `soar-development.md`. For operational API usage (which endpoints to call for incident management), see `incident-ops.md`.
+This reference covers the XSIAM platform API and advanced integration patterns: authentication, the XQL query API async flow, event collector integrations, bidirectional mirroring, long-running containers, and integration caching. For basic integration code conventions (Client class, CommandResults, YAML metadata), see `soar-development.md`. For operational API usage (which endpoints to call for case management), see `case-ops.md`.
 
 All Cortex XSIAM API calls use REST over HTTPS. All endpoints use `POST`.
+
+---
+
+## API Quirks & Gotchas
+
+The items below are quirks observed in real-world operational work that don't always appear in Palo Alto's public docs. For deeper field-level details, also consult the official Cortex XSIAM admin documentation - it carries material not in the public API reference.
+
+### 1. Endpoint reality vs naming
+
+XSIAM exposes five overlapping detection/response surfaces with confusingly similar names. Pick by what you're actually doing, not by which word ("alert", "issue", "incident", "case") the user said:
+
+| Endpoint | Surface | ID type in filters/payload | What it really is |
+|---|---|---|---|
+| `POST /public_api/v1/alerts/get_alerts/` | Older XDR alerts | int (in `alert_id_list` filter) | Read alerts (legacy detection events) |
+| `POST /public_api/v1/issue/search/` | Modern XSIAM issues | int (in `id` filter) | Read issues (unified detection events) |
+| `POST /public_api/v1/alerts/update_alerts/` | Cross-surface write | **string** (in `alert_id_list` payload) | Write status/resolution for issues AND alerts |
+| `POST /public_api/v1/cases/...` | Modern cases | (case_id) | Read/update cases (separate from incidents) |
+| `POST /public_api/v1/incidents/...` | Legacy incidents | (incident_id) | Read/update incidents (separate from cases) |
+
+`alert_id_list` requires **integers** in `get_alerts` filters but **strings** in `update_alerts` payloads. Cast at the call site.
+
+### 2. URL transform - browser FQDN vs API FQDN
+
+The tenant browser URL (e.g., `https://yourcorp.xdr.us.paloaltonetworks.com`) is **not** the PAPI host. PAPI requires the `api-` prefix (e.g., `https://api-yourcorp.xdr.us.paloaltonetworks.com`). Some integrations and clients transform this internally; direct httpx/requests scripts must add the prefix themselves:
+
+```python
+def build_papi_url(fqdn: str) -> str:
+    base = fqdn if "api-" in fqdn else fqdn.replace("https://", "https://api-")
+    if not base.startswith("https://"):
+        base = f"https://{base}"
+    return base
+```
+
+### 3. Async writes - `update_alerts` continues after client timeout
+
+`update_alerts` with a large `alert_id_list` can take more than 120 seconds to respond on busy production tenants, but the server keeps processing after the client connection drops. Operational rules:
+
+- Set client timeout >= 300s for bulk writes against prod.
+- After any timeout, **read state via `get_alerts` (or `get_issues`) before retrying.** Naive retry double-processes IDs already resolved.
+- Make bulk-write scripts idempotent: read state -> filter to unresolved -> write delta.
+- Keep batches small (<= 20 IDs) on production tenants. Large batches commonly exceed the 120-second client default while completing server-side.
+
+### 4. `/issue/search/` reliability
+
+`/issue/search/` has been observed to return 500s and 10-minute timeouts on `status:NEW` queries against some production tenants. If your scheduled sweeps lean on it, build them to tolerate failures gracefully and prefer narrower page sizes (`search_to: 100` or smaller) in manual queries.
+
+### 5. Authentication headers
+
+PAPI uses two paired headers; both required:
+
+```python
+HEADERS = {
+    "x-xdr-auth-id": os.environ["XSIAM_API_KEY_ID"],   # numeric ID, e.g. "39"
+    "Authorization": os.environ["XSIAM_API_KEY"],       # the long key string
+    "Content-Type": "application/json",
+}
+```
+
+API-key permissions (set when generating the key in *Settings -> Configurations -> Integrations -> API Keys*) are independent of any client-side write gate your tooling may impose.
+
+### 6. Resolution status enum reference
+
+Read responses surface internal `STATUS_xxx_NAME` values; write parameters use lowercase `resolved_*` forms. They are not interchangeable:
+
+| Internal value (read) | Write param (status=) | Meaning |
+|---|---|---|
+| `STATUS_010_NEW` | `new` | Not yet triaged |
+| `STATUS_020_UNDER_INVESTIGATION` | `under_investigation` | In progress |
+| `STATUS_030_RESOLVED_THREAT_HANDLED` | (rare/legacy) | Legacy |
+| `STATUS_040_RESOLVED_KNOWN_ISSUE` | `resolved_known_issue` | Triaged as known noise |
+| `STATUS_050_RESOLVED_DUPLICATE` | `resolved_duplicate` | Duplicate of another |
+| `STATUS_060_RESOLVED_FALSE_POSITIVE` | `resolved_false_positive` | False positive |
+| `STATUS_070_RESOLVED_OTHER` | `resolved_other` | Catch-all |
+| `STATUS_080_RESOLVED_TRUE_POSITIVE` | `resolved_true_positive` | Confirmed threat |
+| `STATUS_090_RESOLVED_SECURITY_TESTING` | `resolved_security_testing` | Internal red team / tooling |
+| `STATUS_100_RESOLVED_AUTO_RESOLVE` | `resolved_auto_resolve` | Resolved by playbook |
+
+Treat any value containing `RESOLVED` as final state.
+
+### 7. Detection method enum reference
+
+Values used on the `detection_method` field of issues:
+
+- `CORRELATION` - correlation rules
+- `XDR_ANALYTICS` - XSIAM ML analytics
+- `XDR_ANALYTICS_BIOC` - analytics-driven BIOC
+- `XDR_BIOC` - non-analytics BIOC rules
+- `VULNERABILITY_POLICY` - vulnerability detection
+- `ASM` - Attack Surface Management
+- `CSPM_SCANNER` - Cloud Security Posture
+- `CUSTOM_ALERT` - custom-ingested alerts
+
+### 8. Undocumented `parent` context fields on issues
+
+Issues have `parent` context fields that **do not appear in default API responses on production tenants**, are not in any Palo Alto public documentation, and are not in typical example responses. They are effectively hidden by default - Palo Alto support discloses both the field names and the request shape needed to retrieve them. **Don't waste time inspecting raw responses to find these - they aren't there.** If you need parent issue/case relationship context, contact Palo Alto support for the current field list and the API parameters that surface them.
 
 ---
 
@@ -209,20 +305,33 @@ All paths are relative to `https://api-{fqdn}/public_api/v1/`.
 | `POST /distributions/create` | Create distribution |
 | `POST /scripts/run_script` | Run script on endpoints |
 
+### Playbook Management Endpoints
+
+Two endpoints, both with non-obvious request shapes - wire format is ZIP-wrapped YAML, not JSON.
+
+| Endpoint | Purpose | Request | Response |
+|----------|---------|---------|----------|
+| `POST /public_api/v1/playbooks/get` | Fetch a playbook by name | JSON: `{"request_data": {"filter": {"field": "name", "value": "<exact name>"}}}` | ZIP body containing `<name>.yml` (despite `Content-Type: application/json` request header) |
+| `POST /public_api/v1/playbooks/get_all` | List all playbooks with metadata | JSON: `{"request_data": {}}` | JSON `{"reply": {"playbooks": [{name, id, modified, tags, ...}]}}` |
+| `POST /public_api/v1/playbooks/insert` | Create or update a playbook | `multipart/form-data` with `file=(playbook.zip, <bytes>, application/zip)` where the ZIP contains the playbook YAML at any name (e.g. `playbook.yml`) | 200 on success |
+| `POST /public_api/v1/playbooks/delete` | Delete a playbook by name | JSON: `{"request_data": {"filter": {"field": "name", "value": "<exact name>"}}}` | JSON with `succeeded_items` / `failures_items` |
+
+**Auth headers** are the standard pair (`Authorization`, `X-XDR-AUTH-ID`) - no `Content-Type` on `insert` (multipart sets it). Server identifies the playbook by the `name` / `id` fields **inside the YAML**, not by the ZIP filename or the YAML filename inside the ZIP.
+
 ### Additional Endpoint Categories
 
 These categories exist in the API but are less commonly used programmatically:
-- **Attack Surface Management (ASM)** — external service discovery
-- **BIOCs** — behavioral IOC rule management
-- **Cases** — case management operations
-- **Correlation Rules** — programmatic rule management
-- **Dashboards** — dashboard management
-- **Dataset Management** — XQL dataset operations
-- **Lookup Datasets** — lookup table management for XQL
-- **Playbooks** — playbook management and execution
-- **Profiles** — security profile management
-- **Query Library** — saved XQL query management
-- **Scheduled Queries** — recurring query management
+- **Attack Surface Management (ASM)** - external service discovery
+- **BIOCs** - behavioral IOC rule management
+- **Cases** - case management operations
+- **Correlation Rules** - programmatic rule management
+- **Dashboards** - dashboard management
+- **Dataset Management** - XQL dataset operations
+- **Lookup Datasets** - lookup table management for XQL
+- **Playbooks** - playbook management and execution
+- **Profiles** - security profile management
+- **Query Library** - saved XQL query management
+- **Scheduled Queries** - recurring query management
 
 ---
 
@@ -339,9 +448,9 @@ Integration names must end with `Event Collector` (e.g., "Okta Event Collector")
 
 ### Required Commands
 
-1. `test-module` — Tests connectivity
-2. `{vendor-prefix}-get-events` — Fetches events for display in War Room
-3. `fetch-events` — Main event ingestion command, runs at configured interval
+1. `test-module` - Tests connectivity
+2. `{vendor-prefix}-get-events` - Fetches events for display in War Room
+3. `fetch-events` - Main event ingestion command, runs at configured interval
 
 ### Sending Events to XSIAM
 
@@ -496,7 +605,7 @@ set_integration_context({
 ### Rules
 
 - Keys and values must be **strings**
-- `set_integration_context()` **overwrites the entire context** — get first, modify, then set
+- `set_integration_context()` **overwrites the entire context** - get first, modify, then set
 - Not available in `test-module` command
 - Stored per integration instance in the database
 
@@ -543,7 +652,7 @@ if demisto.command() == 'long-running-execution':
 
 ### Best Practices
 
-- **Never** use `sys.exit()` or `return_error()` — these kill the container
+- **Never** use `sys.exit()` or `return_error()` - these kill the container
 - Always catch and log exceptions
 - Use async code for parallel processing (see Slack v2 integration as reference)
 - Use `updateModuleHealth()` to report status to the UI

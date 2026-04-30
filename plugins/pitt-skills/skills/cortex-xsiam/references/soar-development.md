@@ -1,6 +1,6 @@
 # SOAR Development Reference
 
-> **CDW Terminology Note**: At CDW, SOC analysts work out of **cases** and **issues** — not "incidents." However, this development reference preserves Palo Alto's original "incident" terminology in all code, API, YAML, and directory structure references because those are the actual function names, parameter names, and directory names in the platform (e.g., `fetch-incidents`, `demisto.incidents()`, `IncidentTypes/`, `IncidentFields/`). Narrative and operational language uses "case" where appropriate.
+> **Terminology Note**: In modern XSIAM, SOC analysts work out of **cases** and **issues** - not "incidents." However, this development reference preserves Palo Alto's original "incident" terminology in all code, API, YAML, and directory structure references because those are the actual function names, parameter names, and directory names in the platform (e.g., `fetch-incidents`, `demisto.incidents()`, `IncidentTypes/`, `IncidentFields/`). Narrative and operational language uses "case" where appropriate.
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -35,13 +35,13 @@ All new integrations and scripts must be written in **Python 3**. Python 2 is de
 
 ### Task Types
 
-**Standard tasks** — Range from manual tasks (create case, escalate) to automated tasks (parse file, enrich indicators). Automated tasks are based on integration commands or scripts. Commands can be integration-specific (e.g., `!ADGetUser`) or multi-integration (e.g., `!file` runs across ALL installed file-reputation integrations simultaneously).
+**Standard tasks** - Range from manual tasks (create case, escalate) to automated tasks (parse file, enrich indicators). Automated tasks are based on integration commands or scripts. Commands can be integration-specific (e.g., `!ADGetUser`) or multi-integration (e.g., `!file` runs across ALL installed file-reputation integrations simultaneously).
 
-**Conditional tasks** — Decision-tree branching. Check whether indicators were found, whether an integration is enabled, or ask a single-question survey whose answer determines the next branch.
+**Conditional tasks** - Decision-tree branching. Check whether indicators were found, whether an integration is enabled, or ask a single-question survey whose answer determines the next branch. See "Conditional task YAML structure" below for the AND/OR semantics - they're not obvious from the YAML.
 
-**Data collection tasks** — Interact with users via external surveys (no authentication required). Responses are collected in case context data and can populate custom fields like Grid fields.
+**Data collection tasks** - Interact with users via external surveys (no authentication required). Responses are collected in case context data and can populate custom fields like Grid fields.
 
-**Section headers** — Organizational groupings for related tasks (like chapters in a book). For example, a phishing playbook might have sections for "Indicator Enrichment" and "User Communication."
+**Section headers** - Organizational groupings for related tasks (like chapters in a book). For example, a phishing playbook might have sections for "Indicator Enrichment" and "User Communication."
 
 ### Inputs and Outputs
 
@@ -57,6 +57,36 @@ When building a playbook, consider:
 - Do you need looping for iterative tasks?
 - Are there time-sensitive aspects (SLAs, timeouts)?
 - When is the case considered remediated?
+
+### Conditional task YAML structure
+
+A conditional task's `conditions:` is a **list of labeled branches**, evaluated in order. The first branch whose `condition:` evaluates true takes its `nexttasks[label]` path. If none match, the `#default#` path fires (or the task errors if there's no default).
+
+```yaml
+"35":
+  conditions:
+  - condition:
+    - - <filter>     # AND-row 1: list-of-OR-siblings
+      - <filter>     # OR-sibling at row 1
+    - - <filter>     # AND-row 2 (must also be true)
+    label: ' Malicious'   # leading-space and label-casing are server-controlled, don't normalize
+  - condition:
+    - - <filter>
+    label: Benign
+  nexttasks:
+    ' Malicious': ["40"]
+    Benign:       ["37"]
+    '#default#':  ["38"]
+  type: condition
+```
+
+**The semantics that bite:**
+- **Outer rows are AND-grouped, inner siblings are OR-grouped within each row.** A condition with N outer `- -` rows requires all N to pass; within each row, any sibling matching is enough.
+- **Branches are evaluated top-to-bottom; first match wins.** Label order in `conditions:` is the priority order.
+- **A script-error in any single filter halts the entire task** unless `continueonerror: true` is set on the task. The other filters in that row don't get a chance to short-circuit. This is why an unrelated filter (e.g., a CIDR check that's only meaningful for one alert variant) can crash the whole verdict task for other variants. The fix when the failing filter sits inside a `transformers.*.args.*.value` block: mirror the parent accessor's filter chain explicitly inside that block. The `transformers.*.args.*.value` paths bypass the accessor's filter chain by default, so any strict operator (e.g., `IsInCidrRanges`) crashes on null `left`.
+- **`label:` strings can have leading/trailing whitespace** (e.g., `' Malicious'`) that the server preserves. The corresponding `nexttasks` key must match exactly, including spaces.
+
+**When debugging a condition task that fails on some alerts but works on others:** the issue is almost always a filter row whose data path doesn't resolve for that variant - not a missing branch. Inspect each row's accessors against the actual `Core.OriginalAlert` shape for the failing variant.
 
 ---
 
@@ -184,11 +214,11 @@ if __name__ in ('__main__', '__builtin__', 'builtins'):
     main()
 ```
 
-> **Code Note**: `fetch-incidents` and `demisto.incidents()` are the actual API function names — these create what CDW operationally calls "cases."
+> **Code Note**: `fetch-incidents` and `demisto.incidents()` are the actual API function names - these create what users work with as "cases."
 
 ### Command Function Pattern
 
-Each command gets its own `_command` function. It receives the `client` instance and `args` dict, and returns a `CommandResults` object. Do NOT use `demisto.results()` or global functions inside command functions — keep them unit-testable.
+Each command gets its own `_command` function. It receives the `client` instance and `args` dict, and returns a `CommandResults` object. Do NOT use `demisto.results()` or global functions inside command functions - keep them unit-testable.
 
 ```python
 def get_alerts_command(client, args):
@@ -224,7 +254,7 @@ The primary way to return data to the War Room and context.
 | `relationships` | list | EntityRelationship objects |
 | `scheduled_command` | ScheduledCommand | For polling commands |
 
-> **Code Note**: `outputs_prefix` values like `CortexXDR.Incident` use Palo Alto's API naming convention — this is the expected format.
+> **Code Note**: `outputs_prefix` values like `CortexXDR.Incident` use Palo Alto's API naming convention - this is the expected format.
 
 ### test-module Implementation
 
@@ -241,9 +271,9 @@ def test_module(client):
 
 ### fetch-incidents Implementation
 
-Runs periodically when "Fetch incidents" is enabled. Must be unit-testable — receive `last_run` as a parameter, return `next_run` and `incidents` to main. This is the mechanism that creates cases in XSIAM.
+Runs periodically when "Fetch incidents" is enabled. Must be unit-testable - receive `last_run` as a parameter, return `next_run` and `incidents` to main. This is the mechanism that creates cases in XSIAM.
 
-> **Code Note**: The function name, parameter names, and variable names all use "incident" — this is Palo Alto's API convention. The objects created by this function are what CDW calls "cases."
+> **Code Note**: The function name, parameter names, and variable names all use "incident" - this is Palo Alto's API convention. The objects created by this function are what analysts work with as "cases."
 
 ```python
 def fetch_incidents(client, last_run, first_fetch_time):
@@ -385,7 +415,7 @@ tests:
   - MyIntegration Test
 ```
 
-> **YAML Note**: The `Fetch incidents` display label and `isFetch`/`isfetch` parameter names are Palo Alto's required naming — do not change these even though CDW uses "case" operationally.
+> **YAML Note**: The `Fetch incidents` display label and `isFetch`/`isfetch` parameter names are Palo Alto's required naming - do not change these even though analysts use "case" operationally.
 
 ### YAML Parameter Types
 
@@ -404,9 +434,9 @@ tests:
 
 As of XSIAM 1.3+, parameters are grouped into sections:
 
-- **Connect** — URL, credentials, mandatory params; advanced: proxy, TLS, log level
-- **Collect** — Fetch toggles, first fetch time, fetch count; advanced: intervals, mirroring
-- **Optimize** — Thresholds, advanced queries, other non-connect/collect params
+- **Connect** - URL, credentials, mandatory params; advanced: proxy, TLS, log level
+- **Collect** - Fetch toggles, first fetch time, fetch count; advanced: intervals, mirroring
+- **Optimize** - Thresholds, advanced queries, other non-connect/collect params
 
 ### Command Argument Properties
 
@@ -424,7 +454,7 @@ As of XSIAM 1.3+, parameters are grouped into sections:
 
 ## Content Pack Structure
 
-> **Directory Note**: Directory names like `IncidentTypes/` and `IncidentFields/` are Palo Alto's required naming convention for the content pack structure. These directories contain what CDW operationally calls case types and case fields.
+> **Directory Note**: Directory names like `IncidentTypes/` and `IncidentFields/` are Palo Alto's required naming convention for the content pack structure. These directories contain what analysts work with as case types and case fields.
 
 ```
 Packs/
@@ -500,7 +530,7 @@ Packs/
 
 ### Version Format
 
-`MAJOR.MINOR.REVISION` — major for breaking changes, minor for new features, revision for bug fixes.
+`MAJOR.MINOR.REVISION` - major for breaking changes, minor for new features, revision for bug fixes.
 
 ---
 
@@ -508,9 +538,9 @@ Packs/
 
 ### Context Path Convention
 
-`BrandName.Object.Property` — e.g., `CortexXDR.Incident.incident_id`
+`BrandName.Object.Property` - e.g., `CortexXDR.Incident.incident_id`
 
-> **Code Note**: Context paths like `CortexXDR.Incident` use Palo Alto's naming convention — do not change these to `CortexXDR.Case` as they must match the platform's expected schema.
+> **Code Note**: Context paths like `CortexXDR.Incident` use Palo Alto's naming convention - do not change these to `CortexXDR.Case` as they must match the platform's expected schema.
 
 ### Context Standards
 
@@ -556,12 +586,12 @@ For `!ip`, `!url`, `!file`, `!domain`, `!email` commands: the argument of the sa
 ### Standard Indicator Classes
 
 Available from `CommonServerPython`:
-- `Common.IP` — IP address indicator
-- `Common.URL` — URL indicator
-- `Common.File` — File hash indicator
-- `Common.Domain` — Domain indicator
-- `Common.CVE` — CVE indicator
-- `Common.CustomIndicator` — Custom indicator types
+- `Common.IP` - IP address indicator
+- `Common.URL` - URL indicator
+- `Common.File` - File hash indicator
+- `Common.Domain` - Domain indicator
+- `Common.CVE` - CVE indicator
+- `Common.CustomIndicator` - Custom indicator types
 
 ### Reputation Command Example
 
@@ -681,8 +711,8 @@ def test_fetch_incidents(requests_mock):
 
 ### XSOAR/XSIAM CLI Commands (War Room / Playground)
 
-- **System commands** prefixed with `/` — e.g., `/playground_create`, `/close_investigation`
-- **External commands** prefixed with `!` — e.g., `!ip 8.8.8.8`, `!domain google.com`
+- **System commands** prefixed with `/` - e.g., `/playground_create`, `/close_investigation`
+- **External commands** prefixed with `!` - e.g., `!ip 8.8.8.8`, `!domain google.com`
 
 ---
 

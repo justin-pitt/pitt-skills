@@ -10,28 +10,32 @@
 7. [Functions (Complete)](#functions-complete)
 8. [Aggregations (comp Functions)](#aggregations-comp-functions)
 9. [Joins & Unions](#joins--unions)
-10. [ENUM Types & xdr_data Field Schema](#enum-types--xdr_data-field-schema)
-11. [Correlation Rule XQL Constraints](#correlation-rule-xql-constraints)
-12. [Hot & Cold Storage Queries](#hot--cold-storage-queries)
-13. [Common Query Patterns](#common-query-patterns)
-14. [Best Practices](#best-practices)
-15. [Common Errors & Troubleshooting](#common-errors--troubleshooting)
+10. [ENUM Types & Field Schemas](#enum-types--field-schemas)
+11. [Alerts Dataset Field Schema](#alerts-dataset-field-schema)
+12. [Correlation Rule XQL Constraints](#correlation-rule-xql-constraints)
+13. [Hot & Cold Storage Queries](#hot--cold-storage-queries)
+14. [Common Query Patterns](#common-query-patterns)
+15. [Compute Units (CU)](#compute-units-cu)
+16. [Best Practices](#best-practices)
+17. [Common Errors & Troubleshooting](#common-errors--troubleshooting)
 
 ---
 
 ## Overview
 
-XQL (XDR Query Language) is the query language for Cortex XDR and XSIAM. It queries data stored in datasets — structured tables of security telemetry.
+XQL (XDR Query Language) is the query language for Cortex XDR and XSIAM. It queries data stored in datasets - structured tables of security telemetry.
 
 Key characteristics:
-- **Non-destructive** — queries never modify underlying data
-- **Stage-based** — each stage separated by pipe (`|`)
-- **Similar to SQL** — supports joins, unions, aggregations, but with different syntax
+- **Non-destructive** - queries never modify underlying data
+- **Stage-based** - each stage separated by pipe (`|`)
+- **Similar to SQL** - supports joins, unions, aggregations, but with different syntax
 - **Results** displayed in table or graph format; can power dashboards, correlation rules, BIOC rules, and widgets
 
 XQL queries are submitted via: **Incident Response → Investigation → Query Builder → XQL Search**
 
 The Query Builder IDE provides syntax highlighting, autocomplete, and inline error detection. The Query Library tab stores saved and Palo Alto-provided queries for reuse.
+
+In XSIAM, SOC analysts work primarily out of **cases** rather than alerts directly. Low-severity alerts often do not surface to analysts unless a high+ severity alert correlates them into an existing case. This makes severity assignment in correlation rules operationally critical.
 
 ---
 
@@ -51,6 +55,9 @@ The first non-config line defines the data source. Subsequent lines are stages t
 ```xql
 // Single-line comment
 dataset = xdr_data  // inline comment
+
+/* Multi-line comment
+   spanning multiple lines */
 ```
 
 ### Style Guide
@@ -91,7 +98,7 @@ If no dataset is specified, the query runs against `xdr_data`. You can change th
 | `endpoints` | Endpoint inventory and status | Requires Endpoint Admin or Investigator role |
 | `host_inventory` | Host inventory data | Excluded from retention enforcement |
 | `cloud_audit_log` | Cloud provider audit logs | Used by BIOC rules |
-| `correlationsauditing` | Correlation rule audit logs | Tracks rule creation, modification, enable/disable |
+| `correlationsauditing` | Correlation rule audit logs | Tracks rule creation, modification, enable/disable. **Confirmed unavailable in some tenants.** If needed, export rule list from Detection & Threat Intel → Detection Rules → Correlations UI. |
 | `panw_ngfw_traffic_raw` | Palo Alto NGFW traffic logs | Via Strata Logging Service |
 | `panw_ngfw_threat_raw` | NGFW threat logs | |
 | `panw_ngfw_url_raw` | NGFW URL filtering logs | |
@@ -99,6 +106,12 @@ If no dataset is specified, the query runs against `xdr_data`. You can change th
 | `panw_ngfw_auth_raw` | NGFW authentication logs | |
 | `msft_azure_ad_raw` | Azure AD / Entra ID logs | Via Marketplace content pack |
 | `msft_o365_general_raw` | Office 365 audit logs | |
+| `pan_dss_raw` | Active Directory via Cloud Identity Engine | Identity data |
+| `identity_analytics` | Identity Analytics data | UEBA identity scoring |
+| `panw_prisma_access_raw` | Prisma Access logs | Cloud-delivered security |
+| `aws_s3_raw` | AWS audit logs | Via S3 ingestion |
+| `msft_azure_raw` | Azure audit logs | Via Azure Event Hub or API |
+| `gcp_pubsub_raw` | GCP audit logs | Via Pub/Sub ingestion |
 
 ### Custom Datasets
 Third-party data sources create datasets with the pattern: `vendor_product_raw`
@@ -110,6 +123,7 @@ Custom datasets are created via:
 - Broker VM syslog collection with custom parsing rules
 - HTTP Event Collector
 - Cloud-to-cloud API collectors
+- Pre-XSIAM data routing (e.g., Cribl) - if you route data through a stream processor before XSIAM, dataset names may not follow the `vendor_product_raw` convention. Verify in the schema pane.
 
 ### Discovering Your Datasets
 ```xql
@@ -117,11 +131,13 @@ Custom datasets are created via:
 dataset = xdr_data
 | comp count() by _vendor, _product, _dataset
 | sort desc count
+| view column order = populated
 
 // Check available alert sources (verify dataset name)
 dataset = alerts
 | comp count() by alert_source
 | sort desc count
+| view column order = populated
 ```
 
 ### Presets
@@ -198,7 +214,9 @@ The complete list of XQL stages:
 | `replacenull` | Replace null values with a specified string |
 | `search` | Free text search across fields |
 | `sort` | Order results |
+| `tag` | Tag/label results for categorization |
 | `target` | Save query results to a dataset for future use |
+| `top` | Return the top N results by frequency |
 | `transaction` | Find sequences of related events |
 | `union` | Combine two result sets (new rows) |
 | `view` | Control result display (graph type, highlight) |
@@ -312,7 +330,7 @@ Restricts records by condition. Place as early as possible for performance.
 | filter _time >= subtract(current_time(), to_integer("7d"))
 ```
 
-> **Important:** The `=` operator is an exact match — it does NOT accept wildcards. Use `contains` for substring matching, or `in` with wildcards. The `in` operator supports wildcards and can function identically to `contains`.
+> **Important:** The `=` operator is an exact match - it does NOT accept wildcards. Use `contains` for substring matching, or `in` with wildcards. The `in` operator supports wildcards and can function identically to `contains`.
 
 ### iploc
 Associates IP addresses with geolocation information.
@@ -349,12 +367,30 @@ Free text search across all fields.
 ```
 
 ### sort
-Orders results by one or more fields.
+Orders results by one or more fields. **Direction goes first** (`desc` or `asc`), then the field name.
 
 ```xql
-| sort event_count desc
-| sort _time asc
+| sort desc event_count
+| sort asc _time
 | sort desc alert_count
+```
+
+### tag
+Tags/labels results for categorization and downstream processing.
+
+```xql
+| tag "suspicious_activity"
+```
+
+### top
+Returns the top N results by frequency for a given field. Shorthand for comp + sort + limit pattern.
+
+```xql
+// Top 10 most frequent remote IPs
+| top action_remote_ip by count
+
+// Top 5 processes by occurrence
+| top action_process_image_name limit 5
 ```
 
 ### target
@@ -379,8 +415,8 @@ Finds sequences of related events within a time span.
 
 ### union
 Combines two result sets into one (adds rows). Two modes:
-1. **Dataset union** — combines two datasets for the duration of the query
-2. **Query union** — combines result sets from two XQL queries
+1. **Dataset union** - combines two datasets for the duration of the query
+2. **Query union** - combines result sets from two XQL queries
 
 ```xql
 // Query union
@@ -442,6 +478,9 @@ Calculates statistics over groups of rows (window function equivalent).
 | `->` | JSON field extraction | `parsed_fields -> c_ip` |
 | `!= null` / `= null` | Null check | `filter dns_query_name != null` |
 | `INCIDR` | IP in CIDR range | `filter incidr(src_ip, "10.0.0.0/8")` |
+| `+` | Add / concatenate | `alter full_path = folder + "\\" + filename` |
+
+> **JSON case sensitivity:** JSON field names accessed via the `->` operator are case-sensitive. The key name must match exactly for results to be returned. This is a common source of empty query results.
 
 ---
 
@@ -457,7 +496,11 @@ multiply(a, b)         // Multiply
 divide(a, b)           // Divide
 pow(base, exp)         // Power/exponent
 floor(value)           // Floor (round down)
+ceil(value)            // Ceiling (round up)
 round(value)           // Round to nearest integer
+abs(value)             // Absolute value
+sqrt(value)            // Square root
+log(value)             // Logarithm
 ```
 
 ### String Functions
@@ -476,10 +519,10 @@ format_string("%s-%d", field1, f2)  // Format string (printf-style)
 
 ### Regex Functions
 ```xql
-// Extract named capture groups — returns object with named fields
+// Extract named capture groups - returns object with named fields
 regexcapture(field, "user=(?P<username>\w+)")
 
-// Extract matching groups — returns array
+// Extract matching groups - returns array
 regextract(field, "pattern(\w+)")
 
 // Regex replace
@@ -524,10 +567,12 @@ object_create("key1", val1, "key2", val2)             // Create JSON object
 ### Array Functions
 ```xql
 arrayconcat(arr1, arr2)             // Concatenate two arrays
+arraycreate(val1, val2, val3)       // Create array from values
 arraydistinct(array_field)          // Remove duplicates from array
 arrayfilter(array, condition)       // Filter array by condition
 arrayindex(array_field, index)      // Get element at index
 array_length(array_field)           // Count of elements in array
+array_contains(array_field, value)  // Check if array contains a value (returns boolean)
 arraymap(array_field, expression)   // Transform each element (@element reference)
 arrayrange(start, end, step)        // Generate numeric array
 arraystring(array_field, ",")       // Join array elements into string
@@ -559,13 +604,21 @@ incidrlist(ip_field, list_field)             // Check IP against list of CIDRs
 // If/else
 if(condition, true_value, false_value)
 
-// Coalesce — return first non-null value
+// Coalesce - return first non-null value
 coalesce(field1, field2, field3)
 
 // Nested if
 if(score > 90, "critical",
    if(score > 70, "high",
       if(score > 50, "medium", "low")))
+
+// Case/when - multi-condition switch (cleaner than nested if)
+case_when(
+    score > 90, "critical",
+    score > 70, "high",
+    score > 50, "medium",
+    "low"  // default value
+)
 ```
 
 ---
@@ -599,7 +652,7 @@ Preserves raw underlying data alongside aggregated results:
 ## Joins & Unions
 
 ### Join
-Combines data from two queries into a single result set (adds columns). Can only join two datasets at a time — for three or more, chain joins using the `target` stage.
+Combines data from two queries into a single result set (adds columns). Can only join two datasets at a time - for three or more, chain joins using the `target` stage.
 
 #### Join Types
 | Type | Description |
@@ -649,9 +702,11 @@ dataset = xdr_data
 | union (dataset = xdr_data | filter action_process_image_name = "cmd.exe")
 ```
 
+> **Performance tip:** When checking if a field value exists in another dataset, using `IN`/`NOT IN` with `filter` is often more efficient than a `join`. Consider `filter` + `IN` as an alternative when you only need to check membership rather than pull additional columns from the second dataset.
+
 ---
 
-## ENUM Types & xdr_data Field Schema
+## ENUM Types & Field Schemas
 
 ### ENUM Types (xdr_data event filtering)
 
@@ -755,13 +810,47 @@ The `xdr_data` dataset uses ENUM types for event classification:
 | `_dataset` | Dataset name |
 | `_reporting_device_name` | Reporting device hostname |
 
+### Alerts Dataset Field Schema
+
+> **Important field naming differences:** The `alerts` dataset uses different field names than `xdr_data`. Do not assume field names transfer between datasets.
+
+#### Key Alert Fields
+| Field | Type | Description |
+|---|---|---|
+| `alert_name` | string | Name of the alert/rule that fired |
+| `alert_source` | string | Source engine (e.g., `"CORRELATION"`, `"XDR_ANALYTICS_BIOC"`, `"CSPM_SCANNER"`) |
+| `severity` | string | Alert severity level |
+| `host_name` | string | Hostname (NOT `agent_hostname` - that's `xdr_data`) |
+| `user_name` | **array** | Username(s) - **array type, requires `arrayexpand` before `comp`** |
+| `mitre_attack_tactic` | string | MITRE ATT&CK tactic |
+| `mitre_attack_technique` | string | MITRE ATT&CK technique |
+| `resolution_status` | string | Alert resolution status |
+| `_time` | timestamp | Alert timestamp |
+
+#### Common alert_source Values
+| Value | Description |
+|---|---|
+| `CORRELATION` | Correlation rule alerts |
+| `CSPM_SCANNER` | Cloud security posture alerts (Prisma Cloud) |
+| `XDR_ANALYTICS_BIOC` | Behavioral IOC analytics |
+| `VULNERABILITY_POLICY` | Vulnerability policy alerts |
+| `CIEM_SCANNER` | Cloud identity entitlement alerts |
+| `CLOUD_NETWORK_ANALYZER` | Cloud network analysis |
+| `HEALTH` | Platform health alerts |
+| `ASM` | Attack surface management |
+| `PAN_NGFW` | Palo Alto NGFW alerts |
+| `XDR_ANALYTICS` | XDR analytics alerts |
+| `XDR_BIOC` | XDR behavioral IOC alerts |
+
+> **Note:** `alert_source` values may differ between tenants and product versions. Verify in your tenant before encoding the value into a correlation rule.
+
 ---
 
 ## Correlation Rule XQL Constraints
 
 ### Execution Modes
-- **Scheduled** — runs at defined intervals. Required for queries needing historical lookback
-- **Real-Time** — processes data as it is ingested. XSIAM automatically recommends this if the query is eligible. Preferred for low-latency detections
+- **Scheduled** - runs at defined intervals. Required for queries needing historical lookback
+- **Real-Time** - processes data as it is ingested. XSIAM automatically recommends this if the query is eligible. Preferred for low-latency detections
 
 ### Schedule Options (Scheduled Mode)
 | Frequency | Description |
@@ -791,8 +880,8 @@ Mapping fields improves incident grouping logic and enables XSIAM to list artifa
 
 ### Alert Suppression
 Prevents duplicate alerts with matching field values within a time window:
-- **Suppression fields** — which fields must match (e.g., `hostname`, `username`, `source_ip`)
-- **Time window** — how long to suppress (e.g., 15 minutes, 1 hour)
+- **Suppression fields** - which fields must match (e.g., `hostname`, `username`, `source_ip`)
+- **Time window** - how long to suppress (e.g., 15 minutes, 1 hour)
 
 ### BIOC Rule Limitations
 BIOC rules are limited to:
@@ -821,6 +910,8 @@ Key retention notes:
 - Host Inventory, Vulnerability Assessment, Metrics, and Users datasets are **excluded** from retention enforcement
 - Extended retention available as license add-ons
 
+See `data-pipeline.md` for the full hot/cold/archived tier model and `archived_data = true` syntax.
+
 ---
 
 ## Common Query Patterns
@@ -831,11 +922,13 @@ Key retention notes:
 dataset = xdr_data
 | comp count() as event_count by _vendor, _product
 | sort desc event_count
+| view column order = populated
 
 // What datasets exist and have data
 dataset = xdr_data
 | comp count() by _dataset
 | sort desc count
+| view column order = populated
 ```
 
 ### Alert Inventory by Source
@@ -844,26 +937,38 @@ dataset = xdr_data
 dataset = alerts
 | comp count() as alert_count by alert_source, severity
 | sort desc alert_count
+| view column order = populated
 
 // Correlation rule alert inventory
-dataset = alerts
-| filter alert_source = "Correlation Rule"
+config timeframe = 30d
+| dataset = alerts
+| filter alert_source = "CORRELATION"
 | comp count() as alert_count,
-      count_distinct(agent_hostname) as unique_hosts,
+      count_distinct(host_name) as unique_hosts,
       min(_time) as first_seen,
       max(_time) as last_seen
   by alert_name, severity
-| sort alert_count desc
+| sort desc alert_count
+| view column order = populated
 ```
 
-> **Note:** If your tenant uses `xdr_alerts` instead of `alerts`, substitute accordingly. Check your schema pane.
+> **Notes:** The dataset is `alerts` (not `xdr_alerts`) on XSIAM. The `user_name` field is an array - use `arrayexpand user_name` before aggregating by user. Confirm `alert_source` values for your tenant.
 
 ### Correlation Rule Audit Trail
 ```xql
-// Track rule creation, modification, enable/disable events
-dataset = correlationsauditing
-| fields _time, rule_name, action, user_name, status
-| sort _time desc
+// NOTE: correlationsauditing dataset is unavailable in some tenants.
+// Workaround: Export rule list from the UI:
+//   Detection & Threat Intel > Detection Rules > Correlations
+// Then diff the UI export against the alerts query below to find
+// silent rules (enabled but never firing):
+config timeframe = 30d
+| dataset = alerts
+| filter alert_source = "CORRELATION"
+| comp count() as alert_count by alert_name
+| sort desc alert_count
+| view column order = populated
+
+// Rules in the UI export but absent from this query = silent/broken rules
 ```
 
 ### Threat Hunting: Suspicious Process Execution
@@ -872,8 +977,9 @@ dataset = xdr_data
 | filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START
 | filter actor_process_image_name in ("powershell.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe")
 | fields _time, agent_hostname, actor_process_image_path, action_process_image_name, action_process_command_line
-| sort _time desc
+| sort desc _time
 | limit 500
+| view column order = populated
 ```
 
 ### DNS Analysis for a Specific User
@@ -883,7 +989,8 @@ dataset = xdr_data
 | filter dns_query_name != null
 | filter user_id contains "stanley.hudson"
 | comp count() as attempts by dns_query_name
-| sort attempts desc
+| sort desc attempts
+| view column order = populated
 ```
 
 ### Failed Login Analysis (NGFW)
@@ -893,7 +1000,8 @@ dataset = panw_ngfw_system_raw
 | alter username = regexcapture(description, "user '(?P<user>[^']+)'")
 | alter source_ip = regexcapture(description, "From: (?P<ip>\d+\.\d+\.\d+\.\d+)")
 | comp count() as failed_attempts by username, source_ip, _reporting_device_name
-| sort failed_attempts desc
+| sort desc failed_attempts
+| view column order = populated
 ```
 
 ### Cross-Source IP Investigation with XDM
@@ -901,8 +1009,9 @@ dataset = panw_ngfw_system_raw
 datamodel dataset in (panw_ngfw_traffic_raw, xdr_data)
 | filter xdm.source.ipv4 = "192.168.1.100"
 | fields _time, xdm.source.ipv4, xdm.target.ipv4, xdm.target.port, xdm.event.type
-| sort _time desc
+| sort desc _time
 | limit 200
+| view column order = populated
 ```
 
 ### Top Talkers by Data Volume
@@ -910,8 +1019,9 @@ datamodel dataset in (panw_ngfw_traffic_raw, xdr_data)
 dataset = panw_ngfw_traffic_raw
 | comp sum(bytes_sent) as total_sent, sum(bytes_received) as total_received by src_ip
 | alter total_bytes = add(total_sent, total_received)
-| sort total_bytes desc
+| sort desc total_bytes
 | limit 20
+| view column order = populated
 ```
 
 ### Process Tree Investigation
@@ -920,7 +1030,8 @@ dataset = xdr_data
 | filter agent_hostname = "suspect-workstation"
 | filter event_type = ENUM.PROCESS
 | fields _time, causality_actor_process_image_name, actor_process_image_name, action_process_image_name, action_process_command_line
-| sort _time asc
+| sort asc _time
+| view column order = populated
 ```
 
 ### File Activity Monitoring
@@ -930,6 +1041,7 @@ dataset = xdr_data
 | filter action_file_path contains ".exe"
 | filter causality_actor_process_image_name = "outlook.exe"
 | fields _time, agent_hostname, action_file_name, action_file_path, action_file_sha256
+| view column order = populated
 ```
 
 ### Windows Event Log Analysis
@@ -939,7 +1051,8 @@ config case_sensitive = false
 | filter event_id in (4729, 4733, 4735)
 | filter message contains "target_string"
 | fields _time, agent_hostname, event_id, message
-| sort _time desc
+| sort desc _time
+| view column order = populated
 ```
 
 ### Incident Dashboard Queries (XSIAM)
@@ -948,12 +1061,14 @@ config case_sensitive = false
 dataset = incidents
 | filter status = "open"
 | comp count() as incident_count by severity
-| sort incident_count desc
+| sort desc incident_count
+| view column order = populated
 
 // True positive incident rate
 dataset = incidents
 | filter resolve_comment contains "True Positive"
 | comp count() as tp_count by severity
+| view column order = populated
 ```
 
 ### User Context for Process Launch
@@ -965,27 +1080,55 @@ config case_sensitive = false
 | filter event_type = ENUM.PROCESS
 | filter action_process_image_name = "suspicious.exe"
 | fields _time, agent_hostname, causality_actor_effective_username, action_process_command_line
+| view column order = populated
 ```
+
+---
+
+## Compute Units (CU)
+
+XQL queries consume **Compute Units (CU)** based on the volume of data scanned and the complexity of the query. XSIAM provides a free annual CU quota based on your license tier.
+
+Key facts:
+- If the annual CU quota is exhausted, queries will fail until the next billing cycle or additional CU are purchased
+- Additional CU can be purchased via the **Compute Unit add-on** (minimum 50 CU purchase, provides 1 additional CU per day)
+- Daily consumption limits can be configured in the UI to prevent quota burn
+- Unfiltered queries against large datasets (e.g., `xdr_data` with no filters over 30d) consume significantly more CU than targeted queries
+- Correlation rules running on schedule consume CU on every execution - poorly filtered rules can burn through quota quickly
+
+**CU optimization tips:**
+- Filter as early as possible in the query pipeline
+- Use `fields` to limit columns returned
+- Use `limit` during development and testing
+- Set appropriate `config timeframe` - don't query 30d when 24h will do
+- Prefer `IN` over `join` when checking field membership
+- Monitor CU consumption trends in the platform settings
 
 ---
 
 ## Best Practices
 
-1. **Always specify the dataset** — avoids querying unnecessary data and improves performance. Never rely on defaults for production queries.
-2. **Filter early** — put filter stages as close to the dataset declaration as possible to reduce data scanned.
-3. **Use `fields` to limit output** — selecting only needed columns speeds up queries significantly.
-4. **Comment your queries** — use `//` for inline documentation, especially in correlation rules and shared queries.
-5. **Use `dedup` wisely** — deduplication on high-cardinality fields can be expensive.
-6. **Test time ranges** — start with shorter time ranges (24h) before expanding to 7d or 30d.
-7. **Use XDM fields for cross-source** — when querying multiple datasets, always use `datamodel` with `xdm.*` fields.
-8. **Save queries to the library** — Query Builder → Save As → Query to Library for team reuse.
-9. **Use `comp` for aggregation** — it's the XQL equivalent of SQL's GROUP BY + aggregate functions.
-10. **Validate regex patterns** — test `regexcapture` and `regextract` with a small result set before applying broadly.
-11. **Verify dataset names in your tenant** — dataset names (especially `alerts` vs `xdr_alerts`) vary between XDR and XSIAM tenants and versions.
-12. **Use `config case_sensitive = false`** — for case-insensitive searches, especially on username and hostname fields.
-13. **Set appropriate limits** — use `limit` to cap results during development; remove or increase for production.
-14. **Watch the 5,000-hit auto-disable** — correlation rules exceeding 5,000 hits in 24 hours are automatically disabled.
-15. **Use the schema pane** — browse available fields for any dataset before writing queries against it.
+1. **Always specify the dataset** - avoids querying unnecessary data and improves performance. Never rely on defaults for production queries.
+2. **Filter early** - put filter stages as close to the dataset declaration as possible to reduce data scanned.
+3. **Use `fields` to limit output** - selecting only needed columns speeds up queries significantly.
+4. **Always append `| view column order = populated`** - suppresses empty columns and shows only fields with data. Add this as the last stage in every query.
+5. **Comment your queries** - use `//` for inline documentation, especially in correlation rules and shared queries.
+6. **Use `dedup` wisely** - deduplication on high-cardinality fields can be expensive.
+7. **Test time ranges** - start with shorter time ranges (24h) before expanding to 7d or 30d.
+8. **Use XDM fields for cross-source** - when querying multiple datasets, always use `datamodel` with `xdm.*` fields.
+9. **Save queries to the library** - Query Builder → Save As → Query to Library for team reuse.
+10. **Use `comp` for aggregation** - it's the XQL equivalent of SQL's GROUP BY + aggregate functions.
+11. **Validate regex patterns** - test `regexcapture` and `regextract` with a small result set before applying broadly.
+12. **Verify dataset names in your tenant** - dataset names (especially `alerts` vs `xdr_alerts`) vary between XDR and XSIAM tenants and versions. Pre-XSIAM stream processors (Cribl, Logstash) may also rename datasets.
+13. **Use `config case_sensitive = false`** - for case-insensitive searches, especially on username and hostname fields.
+14. **Set appropriate limits** - use `limit` to cap results during development; remove or increase for production.
+15. **Watch the 5,000-hit auto-disable** - correlation rules exceeding 5,000 hits in 24 hours are automatically disabled.
+16. **Use the schema pane** - browse available fields for any dataset before writing queries against it.
+17. **Monitor Compute Unit consumption** - unfiltered queries and frequent correlation rule schedules burn CU. Filter early, limit columns, and use appropriate timeframes to conserve your annual quota.
+18. **Prefer `IN` over `join` for membership checks** - when you only need to check if a value exists in another dataset (not pull additional fields), `filter field IN (...)` is more efficient than a join.
+19. **JSON keys are case-sensitive** - when using `->` for JSON field extraction, the key name must match exactly. This is a common source of empty results.
+20. **Know your dataset field names** - `alerts` uses `host_name` (not `agent_hostname`) and `user_name` (array, not string). Always check the schema pane when switching datasets.
+21. **Severity assignment is operationally critical** - in XSIAM, low-severity alerts often only surface when a high+ severity alert pulls them into a case. A miscategorized MEDIUM that should be HIGH may never get analyst eyes.
 
 ---
 
@@ -997,9 +1140,9 @@ config case_sensitive = false
 - Test each stage independently before combining
 
 ### Query returns no results but no error
-- Check the time range — the UI picker may be set too narrow
+- Check the time range - the UI picker may be set too narrow
 - Verify the dataset contains data: `dataset = <name> | limit 10`
-- Check `config case_sensitive` — field value comparisons are case-sensitive by default
+- Check `config case_sensitive` - field value comparisons are case-sensitive by default
 - Verify ENUM types are correct (e.g., `ENUM.PROCESS` not `"PROCESS"`)
 
 ### "Aggregation by field of type array is unsupported"
@@ -1013,9 +1156,20 @@ config case_sensitive = false
 ### Correlation rule auto-disabled
 - Rule exceeded 5,000 hits in 24 hours
 - Tighten filter logic, increase threshold, or add suppression
-- Review alert volume with: `dataset = alerts | filter alert_name = "Rule Name" | comp count() by bin(_time, 1h)`
+- Review alert volume with: `dataset = alerts | filter alert_name = "Rule Name" | comp count() by bin(_time, 1h) | view column order = populated`
 
 ### Wildcards not working with `=` operator
-- The `=` operator is exact match only — it does not accept wildcards
+- The `=` operator is exact match only - it does not accept wildcards
 - Use `contains` for substring matching
 - Use `in` with wildcards, or `~=` for regex matching
+
+### Field names differ between datasets
+- The `alerts` dataset uses `host_name`, not `agent_hostname` (which is in `xdr_data`)
+- The `alerts` dataset uses `user_name` (array type), not `actor_primary_username`
+- Always check the schema pane for field names specific to the dataset you're querying
+- Run `dataset = <name> | fields * | limit 1` to discover available fields
+
+### "Aggregation by field of type array is unsupported" in alerts
+- Fields like `user_name` in the `alerts` dataset are array types
+- Use `arrayexpand user_name` before `comp count_distinct(user_name)`
+- Alternatively, use `arrayindex(user_name, 0)` to extract the first element
