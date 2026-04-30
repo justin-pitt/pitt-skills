@@ -34,9 +34,15 @@ if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 
 Write-Host "Cloning obra/superpowers..."
 git clone --quiet https://github.com/obra/superpowers $tmp
+if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE) — check network/DNS" }
+
 Push-Location $tmp
-git -c advice.detachedHead=false checkout --quiet $CommitSha
-Pop-Location
+try {
+    git -c advice.detachedHead=false checkout --quiet $CommitSha
+    if ($LASTEXITCODE -ne 0) { throw "git checkout ${CommitSha} failed (exit $LASTEXITCODE) — bad SHA?" }
+} finally {
+    Pop-Location
+}
 
 $missing = @()
 foreach ($name in $skills) {
@@ -57,7 +63,7 @@ foreach ($name in $skills) {
 }
 
 if ($missing) {
-    Write-Warning "Missing in upstream at ${CommitSha}: $($missing -join ', ')"
+    throw "Missing in upstream at ${CommitSha}: $($missing -join ', '). Edit `$skills in this script or pin a different SHA."
 }
 
 Write-Host ""
