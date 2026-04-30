@@ -1,6 +1,7 @@
 ---
 name: writing-skills
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
+license: MIT
 ---
 
 # Writing Skills
@@ -106,6 +107,7 @@ skills/
 ---
 name: Skill-Name-With-Hyphens
 description: Use when [specific triggering conditions and symptoms]
+license: MIT
 ---
 
 # Skill Name
@@ -160,15 +162,19 @@ When the description was changed to just "Use when executing implementation plan
 ```yaml
 # ❌ BAD: Summarizes workflow - Claude may follow this instead of reading skill
 description: Use when executing plans - dispatches subagent per task with code review between tasks
+license: MIT
 
 # ❌ BAD: Too much process detail
 description: Use for TDD - write test first, watch it fail, write minimal code, refactor
+license: MIT
 
 # ✅ GOOD: Just triggering conditions, no workflow summary
 description: Use when executing implementation plans with independent tasks in the current session
+license: MIT
 
 # ✅ GOOD: Triggering conditions only
 description: Use when implementing any feature or bugfix, before writing implementation code
+license: MIT
 ```
 
 **Content:**
@@ -182,18 +188,23 @@ description: Use when implementing any feature or bugfix, before writing impleme
 ```yaml
 # ❌ BAD: Too abstract, vague, doesn't include when to use
 description: For async testing
+license: MIT
 
 # ❌ BAD: First person
 description: I can help you with async tests when they're flaky
+license: MIT
 
 # ❌ BAD: Mentions technology but skill isn't specific to it
 description: Use when tests use setTimeout/sleep and are flaky
+license: MIT
 
 # ✅ GOOD: Starts with "Use when", describes problem, no workflow
 description: Use when tests have race conditions, timing dependencies, or pass/fail inconsistently
+license: MIT
 
 # ✅ GOOD: Technology-specific skill with explicit trigger
 description: Use when using React Router and handling authentication redirects
+license: MIT
 ```
 
 ### 2. Keyword Coverage
@@ -528,6 +539,7 @@ Add to description: symptoms of when you're ABOUT to violate the rule:
 
 ```yaml
 description: use when implementing any feature or bugfix, before writing implementation code
+license: MIT
 ```
 
 ## RED-GREEN-REFACTOR for Skills
