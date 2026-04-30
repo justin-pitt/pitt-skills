@@ -4,7 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v1.2.0
+## [Unreleased] — v1.3.0
+
+Retire `threatconnect-polarity` ahead of a more robust replacement skill.
+
+### Removed
+- `threatconnect-polarity` skill removed from the plugin. A replacement is being authored separately and will land in a future release. The `threatconnect-polarity.instructions.md` Copilot mirror is removed by `build.ps1` regeneration.
+
+### Changed
+- `plugin.json` version bumped 1.2.0 → 1.3.0.
+
+## [1.2.0] - 2026-04-30
 
 `cortex-xsiam` and `tines` vendored skills both gain comprehensive content merged from author standalone copies. New build-verify pre-commit hook keeps Copilot mirrors in sync. PowerShell 5.1 compatibility for the installer wrappers.
 
