@@ -56,7 +56,8 @@ TOS Aurora is a Kubernetes-based platform with three logical products that share
 
 ## When To Use Which Reference File
 
-- **references/api.md**: REST and GraphQL specifics. Authentication, base URLs, common endpoints with examples, pagination, JSON vs XML, GraphiQL console, the pytos2 SDK, error handling.
+- **references/api.md**: REST endpoint reference. Authentication, base URLs, content types, full per-component recipes (SecureTrack, SecureChange, SecureApp) with JSON request/response examples, pagination, error handling, common quirks. Use this for any REST call.
+- **references/graphql.md**: GraphQL endpoint, top-level queries, TQL filter usage in GraphQL, pagination (`first`/`offset`), example queries (cross-device rule search, USP traversal, network-object polymorphic fragments), mutation surface. Use this for read-heavy work that needs nested data in one round trip.
 - **references/tql.md**: TQL syntax, all Rule Viewer fields, all Device Viewer fields, USP TQL, operator reference, common query recipes, IPv4/IPv6 search rules.
 - **references/change-automation.md**: SecureChange workflow types, the access-request data model, Designer behaviors, Verifier statuses, Risk Analysis modes (USP and external), custom workflow scripts via the mediator, ticket lifecycle events, decommission and recertification workflows.
 - **references/policy-compliance.md**: USP architecture, security zone matrices, network zones (Internet, Unassociated Networks, Users Networks), zone hierarchies, security groups, USP exceptions, violation calculation behaviors and limits, compliance framework templates (PCI DSS, best practices), Cleanup Browser cleanup IDs (C01-C15).
@@ -66,8 +67,9 @@ TOS Aurora is a Kubernetes-based platform with three logical products that share
 
 ## Quick Decision Tree
 
-- "I need to pull rules, devices, objects, or run a policy search" -> SecureTrack REST or GraphQL. Start in `references/api.md` and `references/tql.md`.
-- "I need to file a ticket to add or remove access" -> SecureChange access request via REST POST to `/tickets`. Start in `references/change-automation.md`.
+- "I need to pull rules, devices, objects, or run a policy search" -> SecureTrack REST. Start in `references/api.md` and `references/tql.md`.
+- "I need cross-device rule search with rich filters, nested data in one call, or USP/violation traversal" -> GraphQL. Start in `references/graphql.md` and `references/tql.md`.
+- "I need to file a ticket to add or remove access" -> SecureChange access request via REST POST to `/tickets`. Start in `references/change-automation.md` for workflow context, `references/api.md` for the endpoint and body shape.
 - "I need to react to a ticket event (validate, enrich, kick off external work)" -> Workflow Integrator if it's a clean JSON request/response to ITSM. Custom workflow script + mediator pattern if it needs arbitrary logic. Start in `references/workflow-integrator.md` or `references/change-automation.md` (Custom Scripts section).
 - "I need to push SecureChange ticket data to ServiceNow on every step" -> Workflow Integrator. Start in `references/workflow-integrator.md`.
 - "I need to expose Tufin to an LLM agent or assistant" -> Build an MCP server wrapping the REST endpoints. Start in `references/api.md` and `references/soar-integration.md` (the XSOAR command surface is the right MVP toolset).
