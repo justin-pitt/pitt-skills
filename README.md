@@ -40,6 +40,8 @@ If your environment blocks symlinks, add to your VS Code user settings.json:
 
 See [catalog/](catalog/) for the list of skills and the upstream marketplaces this repo points at.
 
+Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT). Claude Code users also get the live upstream marketplace via the install script; Copilot users use the vendored snapshot.
+
 ## Authoring
 
 See [docs/authoring-a-skill.md](docs/authoring-a-skill.md).
