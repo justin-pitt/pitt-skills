@@ -1,17 +1,17 @@
 # Tines Self-Hosted on Azure
 
-Reference for deploying Tines self-hosted in Azure. Tines does not publish Azure-specific guidance directly — this doc translates the official self-hosted requirements (Docker Compose, AWS Fargate, Helm Charts) into Azure-native patterns. Validate specifics with the Tines SE during POC and architecture review.
+Reference for deploying Tines self-hosted in Azure. Tines does not publish Azure-specific guidance directly — this doc translates the official self-hosted requirements (Docker Compose, AWS Fargate, Helm Charts) into Azure-native patterns. Validate specifics with a Tines SE during POC and architecture review.
 
 ---
 
-## 1. Why Self-Hosted (CDW Context)
+## 1. Why Self-Hosted on Azure
 
-Driving reasons for going self-hosted in Azure rather than SaaS:
-- **Performance visibility** — backend metrics, traces, query performance directly observable; no waiting on vendor support to diagnose backend issues (the Palo Alto experience CDW is exiting)
-- **Data residency control** — all customer data stays within CDW-controlled Azure subscription
+Common reasons orgs go self-hosted in Azure rather than SaaS Tines:
+- **Performance visibility** — backend metrics, traces, query performance directly observable; no waiting on vendor support to diagnose backend issues
+- **Data residency control** — all customer data stays within your Azure subscription
 - **Network integration** — direct VNet access to internal systems eliminates much Tunnel complexity
-- **Compliance posture** — full ownership of audit logs, encryption, access controls
-- **Predictable cost model** — Azure consumption is forecastable; some Tines pricing variability removed
+- **Compliance posture** — full ownership of audit logs, encryption, and access controls
+- **Predictable cost model** — Azure consumption is forecastable; some SaaS pricing variability is removed
 
 Trade-offs accepted:
 - Customer responsibility for: infrastructure, upgrades, backups, scaling, certificate management
@@ -30,7 +30,7 @@ Trade-offs accepted:
 4. Image verification keys/process
 5. Self-hosted licensing terms (separate from SaaS pricing)
 
-### From CDW Azure
+### From your Azure tenant
 1. Azure subscription with appropriate quotas
 2. Resource Group structure (per environment: dev, staging, prod)
 3. Entra ID integration for SSO
@@ -63,7 +63,7 @@ Trade-offs accepted:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Azure Subscription (CDW EDA)                                │
+│ Azure Subscription                                          │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ VNet                                                 │   │
@@ -126,7 +126,7 @@ Get the Tines SE to model your actual workload before finalizing SKUs.
 ### Inbound
 - App Gateway or Front Door for TLS termination, WAF (if required)
 - Restrict to corporate IP ranges via NSG or App Gateway WAF rules (mirrors Tines IP access control)
-- Consider Private Endpoint to expose Tines only to internal CDW network if no external access needed
+- Consider Private Endpoint to expose Tines only to your internal network if no external access is needed
 
 ### Outbound
 - Tines self-hosted needs outbound access to:
@@ -145,7 +145,7 @@ Get the Tines SE to model your actual workload before finalizing SKUs.
 For systems Tines can't reach via VNet:
 - Deploy Tines Tunnel container in target network
 - Tunnel establishes outbound TLS connection to Tines tenant
-- For CDW, mostly unnecessary in Azure — VNet peering and ExpressRoute should reach most internal targets directly. Tunnel is more relevant for: M&A acquired-company networks during integration, partner networks, isolated environments
+- For an Azure-native deployment, often unnecessary — VNet peering and ExpressRoute reach most internal targets directly. Tunnel is more relevant for: acquired-company networks during M&A integration, partner networks, isolated environments without VNet peering
 
 ---
 
@@ -183,9 +183,9 @@ For systems Tines can't reach via VNet:
 - **Log Analytics Workspace** — centralized log store
 - **Azure Monitor Workbooks** — Tines-specific dashboard views
 - **Application Insights** — if instrumenting custom probes
-- Forward Tines audit logs to **Microsoft Sentinel** (if it ends up being CDW's SIEM) or whichever SIEM is selected
+- Forward Tines audit logs to your SIEM of record (Microsoft Sentinel is the natural fit on Azure-native deployments; any SIEM works via syslog or HTTP collector)
 
-### What you specifically want visibility on (Palo Alto-burn lessons)
+### Production observability gaps to monitor
 - Worker pod queue depth — is action processing keeping up?
 - Postgres query performance — slow queries that could degrade UX
 - Redis memory pressure — at risk of evictions?
@@ -224,7 +224,7 @@ For systems Tines can't reach via VNet:
 - Warm standby: backup-restore to secondary region, ~30min RTO
 - Cold: backups in geo-redundant storage, ~hours to days RTO
 
-CDW's exact RTO/RPO requirements drive the choice. For SOAR/automation, you can usually accept hours of RTO if your SIEM and detection pipeline have higher availability — automation can pause without business impact for short windows.
+Your exact RTO/RPO requirements drive the choice. For SOAR / automation, you can usually accept hours of RTO if your SIEM and detection pipeline have higher availability — automation can pause without business impact for short windows.
 
 ---
 
@@ -333,8 +333,8 @@ To resolve during the POC and architecture review:
 5. **Image registry caching** — recommended pattern for ACR cache, or pull directly from Tines registry?
 6. **Tunnel necessity** — what's reachable from VNet vs. requires Tunnel?
 7. **Upgrade testing in air-gapped/restricted environments** — process for offline upgrade
-8. **Backup integration** — recommended approach for backing up alongside CDW's existing backup tooling
-9. **Multi-tenant patterns** — if CDW wants multiple environments (dev/staging/prod), is that one cluster + multiple tenants, or separate clusters?
+8. **Backup integration** — recommended approach for backing up alongside your existing backup tooling
+9. **Multi-tenant patterns** — for multiple environments (dev / staging / prod), is that one cluster with multiple tenants, or separate clusters per environment?
 10. **Disaster recovery RPO/RTO** — what does Tines guarantee, what is customer-responsibility?
 11. **Performance baselines** — typical action latency, action throughput per worker pod, recommended worker:web pod ratio
 12. **AI Agent infrastructure** — does AI Agent traffic leave the self-hosted cluster? Where does the LLM run? What egress is required?
@@ -356,7 +356,7 @@ These are decisions to lock in early in the deployment plan:
 | Observability | Azure Monitor / Datadog / Splunk | Azure Monitor (Azure-native, cost-effective) |
 | Backup | Azure Backup + Velero / 3rd party | Azure Backup for Postgres + Velero for AKS (cheaper, native) |
 | DR | Geo-redundant Postgres / Backup-restore / Hot standby | Backup-restore initially; upgrade to hot standby when justified |
-| Tunnel | Required / Skip if VNet peering reaches all targets | Skip in CDW context unless POC reveals otherwise |
+| Tunnel | Required / Skip if VNet peering reaches all targets | Skip on a well-peered Azure deployment unless POC reveals targets that aren't reachable from the VNet |
 | AI provider | Tines-bundled / Custom (Anthropic, OpenAI) | Tines-bundled for POC; evaluate custom for prod |
 
 Lock these decisions in the architecture review meeting, then build to them.

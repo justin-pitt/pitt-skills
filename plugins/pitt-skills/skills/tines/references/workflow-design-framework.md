@@ -168,51 +168,52 @@ Helps to know what an API is, what JSON looks like, how a webhook works, basic r
 
 ---
 
-## 8. Application to CDW POC and Migration
+## 8. Applying the Framework to Common SOC Workflow Categories
 
-### How this framework applies to your three POC workflows
+### Phishing triage — classic hybrid
 
-**Phishing Triage** (Workflow 1) — classic hybrid:
-- Deterministic intake + IOC extraction + TI enrichment
+- Deterministic intake + IOC extraction + threat-intel enrichment
 - Agentic decision (auto-close vs escalate)
 - Deterministic execution of containment if escalated
 - Humanled review of escalations
 
-This is the workflow most likely to demonstrate Tines' "intelligent workflow platform" claim. If Tines can't cleanly support all three modes in this single workflow, that's a meaningful POC finding.
+This is the workflow shape most likely to demonstrate the "intelligent workflow platform" claim. If a SOAR platform can't cleanly support all three modes in a single workflow, that's a meaningful evaluation finding.
 
-**Brute Force Response** (Workflow 2) — mostly deterministic with humanled gate:
+### Brute-force / sign-in anomaly response — mostly deterministic with humanled gate
+
 - Deterministic detection + sign-in confirmation
-- Humanled gate for account disable in some cases (e.g., executive accounts)
+- Humanled gate for account disable in sensitive cases (e.g., executive accounts)
 - Deterministic re-enable after verification
 
-Less AI-heavy. Demonstrates Tines as a deterministic SOAR. AI Agent isn't the differentiator here.
+Less AI-heavy. Demonstrates the platform as a deterministic SOAR. AI Agent isn't the differentiator here.
 
-**Threat Intel IOC Deployment** (Workflow 3) — fully deterministic:
+### Threat-intel IOC deployment — fully deterministic
+
 - Validate score → deploy across control planes → confirm
 - No AI required; AI would be wrong for this (must be 100% accurate)
-- Demonstrates cross-pillar deterministic orchestration
+- Demonstrates cross-control-plane deterministic orchestration
 
-### How this framework applies to migration planning
+### Applying the framework to migration planning
 
-The "should we automate this at all?" filters apply to every XSIAM playbook you consider migrating:
+The "should we automate this at all?" filters apply to every legacy SOAR playbook you consider migrating:
 - Frequency: is it actually used?
 - Accuracy: does it require deterministic precision?
-- Feasibility: do all the integrations exist in Tines?
+- Feasibility: do all the integrations exist in the new platform?
 - Team readiness: who owns it; are they aligned?
 - Business benefit: what changes if it doesn't get migrated?
 
-Some XSIAM playbooks won't pass these filters. **Use the migration as an opportunity to retire workflows that don't earn their keep.** Don't lift-and-shift everything.
+Some legacy playbooks won't pass these filters. **Use migration as an opportunity to retire workflows that don't earn their keep.** Don't lift-and-shift everything.
 
-### How this framework applies to the Active Defense Grid
+### Applying the framework to a "capability-first" automated-response strategy
 
-CISO directive is "capability over visibility." That doesn't mean everything is agentic. The right framing:
+A "capability over visibility" mandate doesn't mean everything is agentic. The right framing:
 - Detection logic: deterministic (correlation rules, BIOC, etc.)
 - Triage decision: agentic (where AI Agent shines)
-- Cross-pillar countermeasure execution: deterministic (predictable actions on triggered conditions)
+- Cross-control-plane countermeasure execution: deterministic (predictable actions on triggered conditions)
 - Escalation review: humanled
 - Strategy and tuning: humanled with AI assistance
 
-Active Defense Grid is a hybrid system, not an "AI does everything" system.
+Automated response is a hybrid system, not an "AI does everything" system.
 
 ---
 

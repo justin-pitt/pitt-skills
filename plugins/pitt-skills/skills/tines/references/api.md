@@ -113,10 +113,18 @@ Action object includes: `id`, `type` (e.g., `Agents::EventTransformationAgent`, 
 ```
 GET    /api/v1/events                        List events (paginated, large)
 GET    /api/v1/events/{id}                   Get a single event
-GET    /api/v1/events?action_id={id}         Filter by action
+GET    /api/v1/events?action_id={id}         Returns events but does NOT actually filter — see note
 GET    /api/v1/events?story_id={id}          Filter by story
 DELETE /api/v1/events/{id}                   Delete an event
 ```
+
+**Caveat:** the `?action_id={id}` query parameter does NOT actually restrict the response to events emitted by that action — it returns a broader pool. Filter client-side by `agent_id == <id>` on each event, or group events from one story run by the shared `story_run_guid` field. The richer signal for action-level debugging is the action-logs endpoint:
+
+```
+GET /api/v1/actions/{id}/logs?per_page=N      Action-level log messages
+```
+
+Returns `{action_logs: [...]}`. Each entry has `level` (3=info, 4=error), `created_at`, and a `message` field. The `message` on an HTTP Request log includes the exact URL and body Tines sent after pill substitution — the single most useful piece of info when diagnosing why a URL hit endpoint-not-found or an API rejected your params. For AI Agent logs, errors like "AI actions cannot run in a personal team" or "Error evaluating formula: Undefined function FORMAT_DATE" surface here. Not prominent in the public docs; see [gotchas.md](gotchas.md#17-action-logs-endpoint-is-the-single-best-debug-tool).
 
 ### Credentials
 ```
@@ -289,6 +297,34 @@ The Send to Story action payload format:
 
 Resolution order: current team first, then any Story globally enabled for Send to Story.
 
+### Enabling a Story to receive Send to Story calls
+
+Before any Send-to-Story action (or MCP tool wired through Send-to-Story) can invoke a target Story, that target must be explicitly enabled:
+
+```
+PUT /api/v1/stories/{id}
+{
+  "send_to_story_enabled": true,
+  "send_to_story_access_source": "TEAM",
+  "entry_agent_id": <id of entry action, usually webhook>,
+  "exit_agent_ids": [<id of action whose emission is the return value>]
+}
+```
+
+Acceptable `send_to_story_access_source` values: `"TEAM"`, `"ALL_TEAMS"`, `"SPECIFIC_TEAMS"`. Tines internally normalizes `"TEAM"` to `send_to_story_access_source="STS"` + `send_to_story_access="TEAM"` — idiosyncratic but harmless.
+
+## 8a. Action wiring (links_to_sources / links_to_receivers) quirks
+
+There is **no separate `/links` endpoint**. Linking happens inline on the action body via `links_to_sources` / `links_to_receivers` arrays. To wire action A → action B, POST or PUT action B with:
+
+```json
+{ "links_to_sources": [{"source_id": <A's id>, "type": "DEFAULT"}] }
+```
+
+⚠️ **`PUT /api/v1/actions/{id}` with `links_to_sources` APPENDS** to the existing links rather than replacing them. Same for `links_to_receivers`. Legacy `source_ids` / `receiver_ids` fields are mutually exclusive with the `links_to_*` form and don't reliably replace either.
+
+To change wiring cleanly, **delete and recreate the action**. See [gotchas.md](gotchas.md#8-links_to_sources--links_to_receivers-on-put--adds-does-not-replace).
+
 ---
 
 ## 9. Terraform Provider
@@ -315,7 +351,7 @@ Tines has an official Terraform provider for IaC management.
 | Story drafted in dev, promoted to prod via PR | ✓ | — |
 | Quick iteration in Tines UI | — | ✓ |
 
-For CDW: Terraform fits the GIS posture (infrastructure-as-code culture, change reviewability). Story Syncing is a faster alternative for non-critical work.
+For orgs with established infrastructure-as-code culture and change-reviewability requirements, Terraform is the natural fit. Story Syncing is a faster alternative for non-critical work where speed matters more than full IaC discipline.
 
 ### Example: Terraform-managed Story
 ```hcl
@@ -411,15 +447,20 @@ When creating actions via API, the `type` field uses internal class names:
 | Action UI Name | API `type` Value |
 |---|---|
 | Webhook | `Agents::WebhookAgent` |
-| Receive Email | `Agents::ReceiveEmailAgent` |
+| MCP Server (Webhook variant) | `Agents::WebhookAgent` with `options.mode = "mcp"` |
+| Receive Email (mailbox-hosted) | `Agents::ReceiveEmailAgent` |
+| Receive Email (IMAP poll) | `Agents::IMAPAgent` |
 | Send Email | `Agents::EmailAgent` |
 | HTTP Request | `Agents::HTTPRequestAgent` |
 | Condition | `Agents::TriggerAgent` |
 | Event Transform | `Agents::EventTransformationAgent` |
 | Send to Story | `Agents::SendToStoryAgent` |
-| AI Agent | (verify with current API — type changed when AI Agent action launched) |
+| AI Agent | `Agents::LLMAgent` |
+| Group / subroutine (used as MCP tool) | `Agents::GroupAgent` (with nested `Agents::GroupInputAgent` + `Agents::GroupOutputAgent`) |
 
 The `Agents::` prefix is historical naming from when actions were called "agents" in older Tines versions — a different concept from the current AI Agent action.
+
+**MCP Server is not a distinct action type.** It is a Webhook with `options.mode = "mcp"`. POSTing `type: "Agents::McpServerAgent"` fails. The MCP Server is added from the UI Templates panel, not the main action picker. Tools attached to it are nested `Agents::GroupAgent` subroutines visible only in story exports — `GET /api/v1/actions/{id}` does not return the `tools` array. See [gotchas.md](gotchas.md#2-mcp-server-is-not-a-distinct-action-type).
 
 ---
 
