@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Aborts the commit if scripts/build.ps1 output drifts from what's staged.
+# Skipped when the change set does not touch any build input. Enable with
+#   git config core.hooksPath .githooks
+
+set -e
+
+# Fast-path: only run if a build input is staged.
+if ! git diff --cached --name-only | grep -qE '^plugins/pitt-skills/skills/[^/]+/SKILL\.md$|^scripts/build\.(ps1|sh)$'; then
+    exit 0
+fi
+
+# Find pwsh 7+. PATH first, then known Windows install paths.
+PWSH=$(command -v pwsh 2>/dev/null || true)
+if [ -z "$PWSH" ]; then
+    for cand in \
+        "/c/Program Files/PowerShell/7/pwsh.exe" \
+        "/c/Users/$USER/AppData/Local/Microsoft/WindowsApps/pwsh.exe" \
+        "$LOCALAPPDATA/Microsoft/WindowsApps/pwsh.exe"; do
+        if [ -n "$cand" ] && [ -x "$cand" ]; then PWSH="$cand"; break; fi
+    done
+fi
+if [ -z "$PWSH" ]; then
+    cat >&2 <<'MSG'
+pre-commit: pwsh 7+ not found.
+A SKILL.md or build script change is staged, but the build cannot run to
+verify the Copilot mirrors are up to date. Install pwsh:
+  winget install Microsoft.PowerShell        (Windows)
+  brew install --cask powershell             (macOS)
+  See https://github.com/PowerShell/PowerShell for Linux
+or bypass this hook for this commit:
+  git commit --no-verify
+MSG
+    exit 1
+fi
+
+# Run the build (suppress stdout; show all output only on failure).
+build_log=$("$PWSH" -NoProfile -File scripts/build.ps1 2>&1) || {
+    echo "pre-commit: scripts/build.ps1 failed:" >&2
+    echo "$build_log" >&2
+    exit 1
+}
+
+# Detect drift between build output (working tree) and what is staged.
+# `git diff` respects core.autocrlf so CRLF/LF noise on Windows is ignored.
+# Untracked files (e.g. mirror for a brand-new skill) are caught separately.
+build_paths=(
+    .github/instructions
+    .github/agents
+    .github/prompts
+    .github/copilot-instructions.md
+    plugins/pitt-skills/.claude-plugin/plugin.json
+    .claude-plugin/marketplace.json
+)
+unstaged=$(git diff --name-only -- "${build_paths[@]}")
+untracked=$(git ls-files --others --exclude-standard -- "${build_paths[@]}")
+drift="$unstaged
+$untracked"
+drift=$(printf '%s\n' "$drift" | sed '/^$/d')
+if [ -n "$drift" ]; then
+    cat >&2 <<MSG
+pre-commit: scripts/build.ps1 produced output that is not staged.
+You probably edited a SKILL.md without staging the regenerated mirrors.
+
+Drift:
+$drift
+
+Fix:
+  git add ${build_paths[*]}
+  git commit ...
+
+Bypass for this commit:
+  git commit --no-verify
+MSG
+    exit 1
+fi
+
+exit 0

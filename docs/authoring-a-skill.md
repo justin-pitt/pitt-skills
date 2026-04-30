@@ -1,5 +1,15 @@
 # Authoring a skill
 
+## First-time setup
+
+Enable the pre-commit hook so SKILL.md edits never get committed without their regenerated Copilot mirrors:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `scripts/build.ps1` when a build input is staged and aborts the commit if any output drifts from what's staged. Bypass with `git commit --no-verify` if needed.
+
 ## Create a new skill
 
 1. Use the `skill-creator` skill to scaffold:
