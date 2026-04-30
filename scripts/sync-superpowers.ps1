@@ -34,12 +34,12 @@ if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 
 Write-Host "Cloning obra/superpowers..."
 git clone --quiet https://github.com/obra/superpowers $tmp
-if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE) — check network/DNS" }
+if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE) - check network/DNS" }
 
 Push-Location $tmp
 try {
     git -c advice.detachedHead=false checkout --quiet $CommitSha
-    if ($LASTEXITCODE -ne 0) { throw "git checkout ${CommitSha} failed (exit $LASTEXITCODE) — bad SHA?" }
+    if ($LASTEXITCODE -ne 0) { throw "git checkout ${CommitSha} failed (exit $LASTEXITCODE) - bad SHA?" }
 } finally {
     Pop-Location
 }

@@ -27,7 +27,7 @@ function Invoke-VendorSkill {
     )
 
     # Resolve $Source to a SKILL.md path. Accept either a directory containing
-    # SKILL.md or a direct path to SKILL.md. Don't re-parse the file — just copy it.
+    # SKILL.md or a direct path to SKILL.md. Don't re-parse the file - just copy it.
     $resolved = $Source
     if (Test-Path -PathType Container $Source) {
         $candidate = Join-Path $Source 'SKILL.md'
@@ -62,11 +62,11 @@ function Invoke-VendorSkill {
 
 ## My changes
 
-(none yet — record changes here as you make them)
+(none yet - record changes here as you make them)
 "@
     Set-Content -Path (Join-Path $dest 'UPSTREAM.md') -Value $upstream
 
-    Write-Host "✓ Vendored $SkillName from $UpstreamRepo@$UpstreamSha"
+    Write-Host "Vendored $SkillName from $UpstreamRepo@$UpstreamSha"
 }
 
 if (-not $DotSource) {
