@@ -4,7 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v1.1.0
+## [Unreleased] — v1.2.0
+
+`cortex-xsiam` and `tines` vendored skills both gain comprehensive content merged from author standalone copies. New build-verify pre-commit hook keeps Copilot mirrors in sync. PowerShell 5.1 compatibility for the installer wrappers.
+
+### Added
+- `cortex-xsiam` skill expanded with 7 new references (`attack-surface-mgmt`, `case-customization`, `endpoint-protection`, `engines`, `identity-threat`, `tenant-administration`, `xql-reference`) merged from author's standalone copy. SKILL.md gains an Alert/Issue/Case/Incident terminology block disambiguating the four entities including the int-IDs-for-reads vs string-IDs-for-writes API gotcha. Reference table grew from 8 to 14 rows.
+- `tines` skill expanded with 3 new references (`best-practices`, `formulas`, `gotchas`) and substantial enhancements to 8 existing references. SKILL.md description expanded with new triggers (AI Agent action, formulas, pills syntax, Terraform provider, AI credit pool, MCP server templates, debug context). Reference table grew from 8 to 11 rows.
+- `.githooks/pre-commit` build-verify hook. Aborts the commit if `scripts/build.ps1` output drifts from staged content; opt in per-clone with `git config core.hooksPath .githooks`.
+
+### Changed
+- `plugin.json` version bumped 1.1.0 → 1.2.0.
+- `scripts/install.ps1`, `scripts/vendor-skill.ps1`, `scripts/sync-superpowers.ps1` made compatible with Windows PowerShell 5.1: em-dashes in BOM-less script files scrubbed (Windows-1252 mojibake had been silently eating function definitions), `ConvertFrom-Json -AsHashtable` shim added for PS 5.1, `$IsWindows` guard widened so the `mklink /J` junction fallback fires when symlink creation needs admin / Developer Mode.
+
+## [1.1.0] - 2026-04-29
 
 Vendor `obra/superpowers` — `brainstorming`, `systematic-debugging`, `subagent-driven-development`, and 11 other dev workflow skills available across all three install audiences.
 
