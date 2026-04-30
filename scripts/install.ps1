@@ -17,6 +17,35 @@ function Get-ClaudeHome {
     return Join-Path $HOME ".claude"
 }
 
+function ConvertTo-HashtableRecursive {
+    # ConvertFrom-Json -AsHashtable is PS 6.0+. On Windows PowerShell 5.1 we
+    # walk the PSCustomObject result and rebuild it as nested [hashtable] so
+    # the rest of the script can use Keys/ContainsKey/[] uniformly.
+    param($Value)
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) {
+        $h = @{}
+        foreach ($p in $Value.PSObject.Properties) {
+            $h[$p.Name] = ConvertTo-HashtableRecursive $p.Value
+        }
+        return $h
+    }
+    if ($Value -is [System.Collections.IList] -and $Value -isnot [string]) {
+        $items = foreach ($i in $Value) { ConvertTo-HashtableRecursive $i }
+        return ,@($items)
+    }
+    return $Value
+}
+
+function ConvertFrom-JsonAsHashtable {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Json)
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        return $Json | ConvertFrom-Json -AsHashtable
+    }
+    return (ConvertTo-HashtableRecursive ($Json | ConvertFrom-Json))
+}
+
 function Merge-ClaudeSettings {
     [CmdletBinding()]
     param(
@@ -25,12 +54,12 @@ function Merge-ClaudeSettings {
     $claudeHome = Get-ClaudeHome
     if (-not (Test-Path $claudeHome)) { New-Item -ItemType Directory -Path $claudeHome -Force | Out-Null }
     $settingsPath = Join-Path $claudeHome 'settings.json'
-    $snippet = Get-Content $SnippetPath -Raw | ConvertFrom-Json -AsHashtable
+    $snippet = ConvertFrom-JsonAsHashtable -Json (Get-Content $SnippetPath -Raw)
 
     if (Test-Path $settingsPath) {
         Copy-Item $settingsPath "$settingsPath.bak" -Force
         try {
-            $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+            $existing = ConvertFrom-JsonAsHashtable -Json (Get-Content $settingsPath -Raw)
         } catch {
             throw "Existing settings.json at $settingsPath is not valid JSON ($($_.Exception.Message)). Original backed up at $settingsPath.bak. Fix the JSON manually and re-run."
         }
@@ -44,7 +73,7 @@ function Merge-ClaudeSettings {
                 $existing[$key][$subkey] = $snippet[$key][$subkey]
             }
         } elseif ($existing.ContainsKey($key) -and $existing[$key].GetType() -ne $snippet[$key].GetType()) {
-            Write-Warning "Settings key '$key' has incompatible types in existing ($($existing[$key].GetType().Name)) vs snippet ($($snippet[$key].GetType().Name)). Existing value will be overwritten — see $settingsPath.bak to restore."
+            Write-Warning "Settings key '$key' has incompatible types in existing ($($existing[$key].GetType().Name)) vs snippet ($($snippet[$key].GetType().Name)). Existing value will be overwritten - see $settingsPath.bak to restore."
             $existing[$key] = $snippet[$key]
         } else {
             $existing[$key] = $snippet[$key]
@@ -112,7 +141,7 @@ function New-DirectorySymlink {
     if (Test-Path $Link) {
         $existing = Get-Item $Link -Force
         if ($existing.LinkType) {
-            # Stale symlink or junction — safe to remove
+            # Stale symlink or junction - safe to remove
             Remove-Item $Link -Force
         } else {
             throw "Refusing to overwrite non-symlink at '$Link'. Move or remove it manually, then re-run."
@@ -121,8 +150,9 @@ function New-DirectorySymlink {
     try {
         New-Item -ItemType SymbolicLink -Path $Link -Target $Target -ErrorAction Stop | Out-Null
     } catch {
-        # Fallback for Windows without Developer Mode: directory junction (no admin required, dirs only)
-        if ($IsWindows) {
+        # Fallback for Windows without Developer Mode: directory junction (no admin required, dirs only).
+        # $IsWindows is PS 6+ only and is $null on Windows PowerShell 5.1, so also check $env:OS.
+        if ($IsWindows -or $env:OS -eq 'Windows_NT') {
             cmd /c mklink /J "$Link" "$Target" | Out-Null
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Link)) {
                 throw "Failed to create symlink or junction at '$Link' -> '$Target' (mklink exit $LASTEXITCODE): $($_.Exception.Message)"
@@ -169,7 +199,7 @@ function Remove-ClaudeSettings {
     }
     Copy-Item $settingsPath "$settingsPath.bak" -Force
     try {
-        $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+        $existing = ConvertFrom-JsonAsHashtable -Json (Get-Content $settingsPath -Raw)
     } catch {
         throw "Existing settings.json at $settingsPath is not valid JSON ($($_.Exception.Message)). Original backed up at $settingsPath.bak. Fix the JSON manually and re-run."
     }
@@ -177,7 +207,7 @@ function Remove-ClaudeSettings {
     if ($existing.ContainsKey('extraKnownMarketplaces') -and $existing['extraKnownMarketplaces'] -is [hashtable]) {
         # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
         # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
-        # marketplaces a user might want independently of this plugin — leave them alone.
+        # marketplaces a user might want independently of this plugin - leave them alone.
         if ($existing['extraKnownMarketplaces'].ContainsKey('pitt-skills')) {
             $existing['extraKnownMarketplaces'].Remove('pitt-skills')
         }
@@ -263,7 +293,7 @@ if (-not $DotSource) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
 
     if (-not $Uninstall) {
-        # Detect shadowing before merging settings — surface the conflict early.
+        # Detect shadowing before merging settings - surface the conflict early.
         # Only meaningful for the Claude integration, but cheap to always run.
         # Skipped on -Uninstall: we are not adding plugin skills, so shadowing is moot.
         $shadowing = Get-ShadowingSkills -RepoRoot $repoRoot
@@ -304,14 +334,14 @@ if (-not $DotSource) {
                 'claude'     { Remove-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
                 'copilotCli' { Remove-CopilotCliSymlinks -RepoRoot $repoRoot }
                 'vscode'     { Remove-CopilotChatSymlinks -RepoRoot $repoRoot }
-                default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
+                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode" }
             }
         } else {
             switch ($tool) {
                 'claude'     { Merge-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
                 'copilotCli' { Install-CopilotCliSymlinks -RepoRoot $repoRoot }
                 'vscode'     { Install-CopilotChatSymlinks -RepoRoot $repoRoot }
-                default      { Write-Warning "Unknown tool '$tool' — skipping. Valid: claude, copilotCli, vscode" }
+                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode" }
             }
         }
     }
