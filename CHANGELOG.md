@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — v1.0.0
+## [Unreleased] — v1.1.0
+
+Vendor `obra/superpowers` — `brainstorming`, `systematic-debugging`, `subagent-driven-development`, and 11 other dev workflow skills available across all three install audiences.
+
+### Added
+- 14 skills vendored from `obra/superpowers@6efe32c9` (MIT, Jesse Vincent): `brainstorming`, `dispatching-parallel-agents`, `executing-plans`, `finishing-a-development-branch`, `receiving-code-review`, `requesting-code-review`, `subagent-driven-development`, `systematic-debugging`, `test-driven-development`, `using-git-worktrees`, `using-superpowers`, `verification-before-completion`, `writing-plans`, `writing-skills`.
+- `scripts/sync-superpowers.ps1` — wrapper around `vendor-skill.ps1` that re-vendors all 14 skills against a pinned upstream commit SHA.
+- `superpowers@superpowers-dev` auto-enabled in `settings.snippet.json` so Claude Code users get the live upstream plugin alongside the vendored snapshot.
+
+### Changed
+- `plugin.json` version bumped 1.0.0 → 1.1.0 (additive content).
+
+## [1.0.0] - 2026-04-29
 
 Milestone 4: CI, authoring guide, real `--Uninstall`, prompt-driven install instructions.
 
