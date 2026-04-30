@@ -1,6 +1,6 @@
 ---
 name: tines
-description: Tines is a no-code automation and orchestration platform commonly used as a SOAR replacement, IT automation engine, and workflow builder. Use this skill whenever the user mentions Tines, Tines stories, actions, AI Agent action, Story copilot, Webhook actions, HTTP Request actions, Event Transform, Send to Story, Resources, Pages, Cases, Records, credentials, Connect Flows, the Tines API, tenants, change control, self-hosted Tines, Helm charts for Tines, Tines Tunnel, Command-over-HTTP, Tines on Azure or AWS, Tines credits, the Workbench, or any automation or workflow build inside Tines. Also trigger when the user asks about migrating from XSOAR or other SOAR platforms to Tines, designing playbook or story patterns, integrating security tools through Tines, building forms with Pages, or running case management in Tines.
+description: Tines is a no-code automation and orchestration platform commonly used as a SOAR replacement, IT automation engine, and workflow builder. Use this skill whenever the user mentions Tines, Tines stories, actions, the AI Agent action, Story copilot, Webhook actions, HTTP Request actions, Event Transform, Send to Story, Resources, Pages, Cases, Records, credentials, Connect Flows, formulas, pills (`<<slug.body.field>>` syntax), the Tines API, the Tines Terraform provider, tenants, change control, self-hosted Tines, Helm charts for Tines, Tines Tunnel, Command-over-HTTP, Tines on Azure or AWS, Tines credits and the AI credit pool, the Workbench, MCP server templates exposed by Tines, or any automation or workflow build inside Tines. Also trigger when the user asks about migrating from Cortex XSOAR / XSIAM or other SOAR platforms to Tines, designing playbook or story patterns, integrating security tools through Tines, building forms with Pages, running case management in Tines, or is debugging a Tines workflow, even if they don't name a specific Tines concept.
 license: MIT
 ---
 
@@ -48,15 +48,20 @@ Key architectural concepts:
 
 Read the relevant reference file before answering detailed questions on these topics.
 
+> **Before building anything non-trivial, skim `references/gotchas.md`.** It captures behaviors the public Tines docs underspecify or get wrong: pill syntax `<<slug.body.field>>`, MCP Server's hidden Webhook-with-mode shape, `output_schema` as a hint not enforcer, the 30-second MCP tool ceiling, the action-logs endpoint as the first debug step. Each item costs 30+ minutes of debugging if hit unprepared.
+
 | File | When to Read |
 |---|---|
-| `references/platform.md` | Deep questions on Tines concepts: action types in detail, stories, change control, resources, cases, records, pages, credentials, formulas, self-hosted overview, admin features, pricing, MCP server templates |
+| `references/gotchas.md` | 18 non-obvious Tines behaviors discovered through live tenant work — pill syntax, MCP shape, `output_schema` hint-vs-enforcer, doc-vs-live endpoint divergences, silent failures (bad `team_id`, missing pill paths, links_to_sources PUT-appends), formula gotchas (no `FORMAT_DATE`, `SWITCH` requires default), operational ceilings (30s MCP timeout, CE 3-story cap), debugging shortcuts (action-logs endpoint) |
+| `references/formulas.md` | Formula cheatsheet — referencing data, pill-vs-formula-field stringification, slug normalization, string / array / date / parsing / conditional / lambda / crypto / object functions, worked examples, formula-specific gotchas |
+| `references/best-practices.md` | Tactical AI-Agent discipline — prompting (XML tags, examples, one-job), tool descriptions, output schemas (enums, required reasoning), debugging via `steps[]`, credit management, story design, working discipline (probe-then-trust, UI-excursion-is-valid, pre-extract fields before AI prompt, action-logs endpoint over UI Events panel) |
+| `references/platform.md` | Deep questions on Tines concepts: action types in detail, stories, change control, resources, cases, records, pages, credentials, self-hosted overview, admin features, pricing, MCP server templates |
 | `references/workflow-design-framework.md` | Pre-build decisions: humanled vs deterministic vs agentic taxonomy, four-question decision framework, when to automate at all, mode selection matrix, hybrid workflow patterns, builder skills |
-| `references/agents.md` | AI Agent action deep-dive: configuration, tools (Public/Private Templates, Send to Story, Custom Tools, MCP), Task vs Chat mode, Think tool, models, AI credit pool, audit, common patterns and anti-patterns |
+| `references/agents.md` | AI Agent action deep-dive: configuration, tools (Public/Private Templates, Send to Story, Custom Tools, MCP), Task vs Chat mode, Think + Code Analysis built-in tools, models, AI credit pool, audit, output event shape (live-verified JSON), common failure modes, anti-patterns |
 | `references/ai-production-patterns.md` | Production-tested AI deployment patterns: multi-agent orchestration (lead + specialized), question bank, context window management, cost tracking via Records, AI-on-AI QA, anti-hallucination patterns, memory architecture, validation patterns (parallel-run, detection health, rubric eval), deterministic guardrails, real-world benchmarks |
-| `references/ai-governance.md` | AI governance framework: approval gates, risk-based prioritization, change control, auditability, transparency. High-performing vs add-on AI adoption. Vendor AI risk. AI bias considerations. Voice of Security 2026 industry context. CDW stakeholder mapping. |
-| `references/api.md` | API authentication, REST endpoints, pagination, Workflows-as-APIs (Webhook entry pattern), Send to Story payload format, Terraform provider, action type IDs, common automation patterns |
-| `references/self-hosted-azure.md` | Self-hosted deployment in Azure: AKS via Helm, prerequisites, architecture, sizing, networking, identity, observability, backup/DR, upgrade path, security hardening, migration from POC SaaS |
+| `references/ai-governance.md` | AI governance framework: approval gates, risk-based prioritization, change control, auditability, transparency. High-performing vs add-on AI adoption. Vendor AI risk. AI bias considerations. Voice of Security 2026 industry context. |
+| `references/api.md` | API authentication, REST endpoints (with corrected paths for `user_credentials` and `global_resources`), pagination, action wiring quirks (`links_to_sources` PUT-appends behavior), action-logs endpoint, `events?action_id` filter caveat, Workflows-as-APIs (Webhook entry pattern), Send to Story payload format and target-Story enable, Terraform provider, action type IDs |
+| `references/self-hosted-azure.md` | Self-hosted deployment in Azure: AKS via Helm, prerequisites, architecture, sizing, networking, identity, observability, backup / DR, upgrade path, security hardening, migration from POC SaaS |
 | `references/xsoar-to-tines.md` | Migration from Cortex XSOAR/XSIAM to Tines: mental model shift, concept mapping, action-level mapping, custom code migration, integration migration, incident-to-case migration, gotchas, recommended migration approach |
 
 ## The Eight Action Types
@@ -141,9 +146,7 @@ Seven credential types:
 6. **OAuth 2.0** — full OAuth flow with refresh
 7. **Multi Request** — chain multiple auth requests
 
-**Connect Flows** are pre-built credential wizards for ~200+ vendors. Confirmed flows for the EDA stack include:
-
-CrowdStrike, Microsoft Graph / Outlook / Teams / Defender for Endpoint, Okta, Armis, Entro Security, ThreatConnect, ServiceNow, PagerDuty, Proofpoint TAP / Protection Server / Threat Response, Splunk Enterprise, Splunk SOAR, Elastic, Databricks, Snowflake, Cortex XDR (for transition data), Cribl, Recorded Future, Sentry, Datadog, Cloudflare, Hashicorp Terraform, GitHub, Slack, Jamf, Microsoft OneDrive, Wiz, Tenable, plus Anthropic Claude as a native flow.
+**Connect Flows** are pre-built credential wizards for ~200+ vendors covering major SaaS platforms across identity, EDR, TIP, ticketing, communication, cloud, and AI providers. The full list lives at https://www.tines.com/docs/credentials/connect-flows/ — the catalog evolves; check there rather than relying on any in-doc snapshot.
 
 Anything with an HTTP API can use the generic HTTP Request credential type when no Connect Flow exists.
 
@@ -238,7 +241,7 @@ Tines actions can expose themselves as MCP (Model Context Protocol) endpoints, a
 6. **Use Send to Story** for reusable workflows — anything called from 2+ places should be a sub-Story.
 7. **Enable Change Control** for any Story going to production. Test Resources let you validate drafts without touching live data.
 8. **Use Test events** during build — every action has a Test mode that runs against the most recent received event.
-9. **Reference data with action_name.field syntax** — Tines uses Liquid-style templating with double angle brackets, not curly braces or dollar-sign syntax.
+9. **Reference data with `<<slug.body.field>>` pill syntax** — double angle brackets, not curly braces (`{{ }}`), not ERB (`<% %>`), not dollar-sign (`${}`). The `<<...>>` delimiter is the canonical pill form and is what Tines stores under the hood. See `references/gotchas.md` for the full backstory; this is the single most common bug source for engineers new to Tines.
 10. **For long-running waits, use Delay mode** in Event Transform rather than blocking inside an Action.
 11. **For human-in-the-loop, use Pages or Workbench** — don't try to hold execution in an Action waiting for human input.
 12. **Tag Stories and Actions** with consistent tag taxonomy for filtering, reporting, and access control.

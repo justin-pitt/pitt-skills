@@ -2,7 +2,9 @@
 
 Patterns and anti-patterns for deploying AI Agent and AI-augmented workflows in production. Synthesizes lessons from real-world Tines deployments — most notably the Robinhood RAID team's AI-augmented SOC, which has been running production for over a year. These are battle-tested techniques, not theoretical ones.
 
-> **Decision context (read first):** This doc assumes you've already decided that a stage of your workflow should be agentic. If you're still deciding between humanled, deterministic, and agentic, start with `workflow-design-framework.md`.
+> **Decision context (read first):** This doc assumes you've already decided that a stage of your workflow should be agentic. If you're still deciding between humanled, deterministic, and agentic, start with [workflow-design-framework.md](workflow-design-framework.md).
+>
+> **Companion references:** [best-practices.md](best-practices.md) for tactical prompt / tool / debugging discipline, [agents.md](agents.md) for the AI Agent action surface, [gotchas.md](gotchas.md) for non-obvious platform behaviors that affect production deployments.
 
 The principles also apply when building AI workflows on other platforms — but the Tines-specific implementations (Records for state, Send to Story for sub-agents, deterministic guardrails wrapping agent calls) are what make these patterns clean to express here.
 
@@ -198,8 +200,8 @@ System instructions:
 
 When the agent returns INSUFFICIENT_DATA, escalate to a human. This becomes a quality signal: high INSUFFICIENT_DATA rates indicate gaps in your tooling, not AI failure.
 
-### 6.2 Output schema enforcement
-Use the AI Agent action's Output Schema feature to force structured output. Schema validation catches malformed responses before they propagate downstream.
+### 6.2 Output schema as a strong hint
+Use the AI Agent action's Output Schema feature to bias the model toward structured output. The schema is **a hint, not strict validation** — the model usually conforms but can return off-enum values, extra fields, missing fields, or renamed fields (`reason` instead of `reasoning`, `safe` instead of `benign`). Plan downstream consumers to tolerate drift: case-insensitive regex on enums, `additionalProperties: true` philosophy, default values for missing fields. See [gotchas.md](gotchas.md#3-output_schema-on-agentsllmagent-is-a-hint-not-an-enforcer).
 
 ```json
 {

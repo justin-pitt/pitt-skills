@@ -224,14 +224,15 @@ Tines Cases have:
 
 XSOAR has integrated TIM (Threat Intel Management) with indicator types, feeds, scoring, and DBot reputation. Tines has none of this natively — it's an automation platform, not a TIP.
 
-### CDW context
-You have ThreatConnect as your TIP and Polarity as the overlay. ThreatConnect stays in place; Tines is the automation engine that:
-- Pulls feeds from ThreatConnect (Stories with scheduled HTTP Request actions)
-- Scores/filters indicators (Event Transform + Condition)
-- Distributes IOCs to control planes (CrowdStrike, Akamai, Entra) via per-target sub-Stories
-- Writes status back to ThreatConnect
+### Pattern when you have an existing TIP and overlay
 
-This is actually cleaner than the XSIAM model where TIM was a built-in module. With Tines, the orchestration is explicit and visible in Story graphs.
+If you keep an external TIP (ThreatConnect, etc.) and an overlay platform, the TIP stays in place and Tines becomes the automation engine that:
+- Pulls feeds from the TIP (Stories with scheduled HTTP Request actions)
+- Scores / filters indicators (Event Transform + Condition)
+- Distributes IOCs to control planes (EDR, CDN/WAF, identity) via per-target sub-Stories
+- Writes status back to the TIP
+
+This is cleaner than the XSIAM model where TIM was a built-in module. With Tines, the orchestration is explicit and visible in Story graphs — easier to audit, easier to extend, easier to retire individual feeds without touching the rest.
 
 ---
 
@@ -316,32 +317,32 @@ Skip parallel-run and you skip the calibration data that tells you whether the A
 
 ---
 
-## 11. CDW-Specific Considerations
+## 11. Common Migration Patterns by Org Shape
 
-### XSIAM-to-Tines transition
-The XSIAM exit is the active path, not just SOAR replacement. Tines becomes the SOAR/automation layer in the new stack:
-- **SIEM** (TBD: Sentinel, Splunk+ES, Elastic, Databricks) feeds alerts via Webhook into Tines
+### XSIAM/XSOAR exit with separate SIEM
+When the SIEM is a separate platform (Sentinel, Splunk + ES, Elastic, Databricks, etc.) and Tines is replacing only the SOAR layer:
+- **SIEM** feeds alerts via Webhook into Tines
 - **Tines** orchestrates triage, enrichment, response
-- **Cases** in Tines (or upstream system) hold investigation state
-- **CSOC analysts** work cases via Tines Workbench (or via SIEM-native case views, depending on architecture)
+- **Cases** in Tines (or in the upstream SIEM) hold investigation state
+- **Analysts** work cases via Tines Workbench, or via SIEM-native case views, depending on architecture
 
-### Active Defense Grid alignment
-Per the CISO's CAPABILITY > VISIBILITY directive, Tines Stories should:
+### Capability-first response strategy
+For orgs adopting an automated-response posture, Tines Stories should:
 - Receive detection alerts
 - Decide on response (deterministic logic + AI Agent for nuanced decisions)
 - Execute countermeasures across control planes (Identity, Endpoint, Network, Application)
 - Audit every decision and action
 
-The cross-pillar countermeasure pattern is exactly what Send to Story sub-Stories are built for — one parent Story per detection, one sub-Story per control plane.
+The cross-control-plane countermeasure pattern is exactly what Send to Story sub-Stories are built for — one parent Story per detection, one sub-Story per control plane.
 
-### M&A integration
+### M&A / acquisition integration
 Tines Stories for new acquisitions:
-- Webhook-based intake of acquired company alerts during integration window
-- Tunnel deployment in acquired-company network for legacy system access
-- Standardized M&A integration sub-Stories that get instantiated per acquisition
+- Webhook-based intake of acquired-company alerts during the integration window
+- Tunnel deployment in the acquired-company network for legacy system access without VNet peering
+- Standardized integration sub-Stories that get instantiated per acquisition
 
-### Federal compliance
-Out of scope (confirmed). EDA covers internal corporate only.
+### Federal / regulated tenants
+Federal/FedRAMP-class deployments are typically scoped separately. If your enterprise tenant covers internal corporate work and federal is run elsewhere, confirm that scoping early — it changes both the contract path and the tenant topology.
 
 ---
 
@@ -352,8 +353,8 @@ These are things to confirm during the POC (or with Tines SE) before committing 
 1. **Performance at our event volume** — what's the realistic throughput per Tines instance for our alert load?
 2. **Send to Story loop limits** — how does it scale for 10,000-element arrays (e.g., bulk IOC distribution)?
 3. **Workbench vs SIEM-native cases** — do CSOC analysts want to live in Workbench, or stay in their SIEM and have Tines update there?
-4. **AI Agent reliability for Tier-1 triage** — does the Active Defense Grid use case actually work, or do we need deterministic Story logic?
-5. **Story syncing vs Terraform for IaC** — which fits CDW's change control posture?
+4. **AI Agent reliability for Tier-1 triage** — does the agentic-triage use case actually work at production volume, or do we need deterministic Story logic with AI assist?
+5. **Story syncing vs Terraform for IaC** — which fits the org's change-control posture?
 6. **Tunnel scaling for our integration count** — single Tunnel per environment, or multiple?
 7. **Backup/restore strategy for self-hosted** — Postgres + Redis backup integration with our existing backup tooling
 8. **Migration cost modeling** — credit consumption forecast based on top 10 playbook traffic patterns

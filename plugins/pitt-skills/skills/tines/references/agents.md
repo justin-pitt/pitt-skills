@@ -1,6 +1,6 @@
 # Tines AI Agent Action
 
-Deep reference for Tines' AI Agent action — the agentic AI primitive available since June 2025. This is one of the most differentiating features in Tines vs other SOAR platforms and is core to the Active Defense Grid use case.
+Deep reference for Tines' AI Agent action — the agentic AI primitive launched in 2025. This is one of the most differentiating features in Tines vs other SOAR platforms and is core to any agentic-SOC build pattern.
 
 > **Decision context (read first):** Before going deep on AI Agent, decide whether agentic is even the right mode for your workflow stage — see `workflow-design-framework.md` for the humanled/deterministic/agentic taxonomy and four-question decision framework.
 >
@@ -33,17 +33,20 @@ A deterministic Story follows a fixed graph — same input produces same path an
 - **Custom AI providers** supported: bring your own LLM (OpenAI, Anthropic, custom) for compliance, cost, or capability reasons
 
 ### Available Models (Tines Cloud Default — verify current list with Tines)
-- **Claude Sonnet 4** (Anthropic) — Tines' product team describes this as "one of the very best models there's ever been" for these use cases
-- **Claude Sonnet 3.7** (Anthropic)
-- **Claude Haiku** (Anthropic) — smaller, faster model for cost-sensitive workflows
-- **Amazon Nova**
-- Plus other models added periodically
+Tines provides a current Anthropic Claude lineup (Sonnet, Haiku) plus Amazon Nova and additional models. The exact list rotates as Anthropic and other providers ship new versions; check the live list at `<tenant>/settings/ai → Providers`.
+
+Confirmed live model string from a recent run (the `meta.model` field returned in an AI Agent task event): `us.anthropic.claude-haiku-4-5-20251001-v1:0`. This is what to expect in practice — a fully versioned, region-prefixed model identifier — rather than a marketing name like "Claude Haiku".
 
 ### Bring-Your-Own Model
 Available for both cloud and self-hosted customers. Supported providers (per Tines' product team): OpenAI, Google Gemini, open source (Llama), and "essentially any model the average person would want to use." Verify your specific provider in writing during contract negotiation.
 
-### The Think Tool
-A built-in capability based on Anthropic's research. The agent can use a scratchpad to plan its actions before executing. Improves accuracy on complex tasks. No configuration needed — it's automatically available to the agent. Works with both Tines-built-in and custom AI providers.
+### Built-in Tools (no configuration needed)
+Two tools are available to every AI Agent automatically:
+
+- **Think** — a scratchpad based on Anthropic's research. The agent writes its plan before acting; available to both Tines-built-in and custom AI providers. Materially improves accuracy on complex multi-step tasks. Attaching Think and instructing the agent to plan first beats letting it act-without-planning on long workflows.
+- **Code Analysis** — sandboxed Python for data analysis and chart generation. Useful when the agent needs to crunch numbers, parse CSVs, or produce visualizations from query output without round-tripping through an external tool.
+
+Both are available without consuming a tool slot from the 25-tool-per-agent budget.
 
 ---
 
@@ -54,7 +57,7 @@ A built-in capability based on Anthropic's research. The agent can use a scratch
 | **System instructions** | Set the agent's role, tone, domain, persona, constraints. Like a system prompt. In Chat mode, also defines when the chat ends. |
 | **Prompt** | The actual task instructions. Reference upstream event data with `<<action.field>>`. |
 | **Tools** | List of tools the agent can invoke. Up to 25 per agent (Custom Tools can hold more inside). |
-| **Output schema** | JSON Schema for validating the structured output. Forces the agent to produce parseable output. |
+| **Output schema** | JSON Schema. Used as a **hint** to the model, NOT strictly enforced. Model usually conforms but can return off-enum values, extra fields, missing fields, renamed fields. Plan downstream consumers to tolerate drift (case-insensitive regex on enums, accept additional properties). See [gotchas.md](gotchas.md#3-output_schema-on-agentsllmagent-is-a-hint-not-an-enforcer). |
 | **Model** | The LLM to use. Override the default if needed. |
 | **Additional request parameters** | (Custom providers only) key-value pairs merged into the provider request at invocation. |
 
@@ -131,6 +134,83 @@ Connect to external **MCP (Model Context Protocol)** servers. Tools exposed by t
 
 ### Adding tools quickly
 You can copy actions from elsewhere in your storyboard and paste them directly onto the AI Agent action — they become tools with the same configuration as the source action.
+
+---
+
+## Output Event Shape
+
+The shape an AI Agent action emits, verified against a live tenant. Field names diverge from what the public docs suggest in a few places — note the differences below.
+
+### Task mode, no tools
+
+```json
+{
+  "output": "final text, or parsed object when output_schema influenced the model",
+  "configuration": {"temperature": 0.2, "prompt": "...resolved prompt string..."},
+  "meta": {
+    "provider": {"name": "AWS Bedrock", "provider": "aws_bedrock", "provisioning_type": "tines_provisioned"},
+    "model": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "input_tokens": 155,
+    "output_tokens": 316,
+    "credits_used": 1,
+    "remaining_credits": 42,
+    "duration": 2.13
+  }
+}
+```
+
+Field-naming notes:
+- The metadata container is **`meta`**, not `metadata`.
+- Credit counters are **`credits_used`** and **`remaining_credits`**.
+- **`duration`** is in seconds, float.
+- **`provider`** is a nested object describing which LLM provider Tines invoked.
+
+### Task mode with tools (agentic loop)
+
+Same shape as above plus a `steps` array:
+
+```json
+{
+  "output": "...",
+  "steps": [
+    {"role": "assistant", "text": "I'll look up the user first."},
+    {"role": "tool", "tool_name": "lookup_user", "tool_input": {"email": "..."}, "tool_output": {...}},
+    {"role": "assistant", "text": "Now I'll fetch their tickets."}
+  ],
+  "configuration": {...},
+  "meta": {...}
+}
+```
+
+`steps[]` is the single most useful artifact for debugging misbehaving agents. Read it top to bottom: 90% of "the agent gave the wrong answer" turns out to be the model picking the wrong tool because the tool description was vague, or passing the wrong argument because the input schema wasn't explicit enough.
+
+### Chat mode
+
+Events emit only when the conversation's defined objective is met or the idle timeout fires. The final event contains the conversation's final state plus metadata. Intermediate turns are visible in the action's Events panel during the conversation but don't emit to downstream actions.
+
+### When invoked via an MCP tool call
+
+Tines MCP tool executions have a **hard 30-second timeout**. If the AI Agent (or the Send-to-Story that wraps it) exceeds 30s, the MCP caller receives:
+
+```json
+{"isError": true, "content": [{"type": "text", "text": "Tool execution timeout"}]}
+```
+
+The underlying chain continues running and emits events normally — the caller just doesn't get the result synchronously. Send-to-Story-as-a-tool adds invocation overhead on top of the target story's own duration. Design MCP tool chains to complete in well under 30s, or use an async trigger+poll pattern. See [gotchas.md](gotchas.md#14-mcp-tool-execution-has-a-hard-30-second-timeout).
+
+---
+
+## Common Failure Modes and Fixes
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Agent loops on the same tool | Tool description is ambiguous or the agent can't tell when it has "enough" info | Tighten the description; add explicit "stop when X" to system instructions |
+| Output is a stringified JSON object | No output schema; model returned text that happens to look like JSON | Add output schema; downstream reads it structured |
+| Agent hallucinates tool args | Input schema on the tool is too loose | Tighten the tool's input schema; add an example in the description |
+| High credit burn per run | Too many tools, too much context, or agent keeps retrying | Split into multiple narrower agents; trim system instructions; check `steps[]` for redundant calls |
+| Chat mode never ends | Objective in system instructions is vague | Re-write the objective as a concrete, verifiable condition ("end when user confirms the ticket number") |
+| Tool isn't being called | Tool description doesn't match the user's intent vocabulary | Re-word the description to match how the agent "thinks" about the task |
+| "AI actions cannot run in a personal team" at run time | Story was created with an unknown `team_id` that silently routed it to a personal team | Verify `team_id` against `GET /api/v1/teams`; recreate or migrate. See [gotchas.md](gotchas.md#4-bad-team_id-on-post-apiv1stories--personal-team-no-error). |
 
 ---
 
@@ -239,7 +319,7 @@ Why agent: tone, structure, and audience adaptation
 Things to verify during the POC, with the Tines SE:
 
 1. **Available models per region** — what models are available in our SaaS region (or self-hosted)? Specifically: GPT-4-class, Claude Sonnet/Opus equivalents, latency characteristics.
-2. **Custom AI provider configuration** — what's the operational complexity of bringing a CDW-licensed Anthropic API key vs using Tines' bundled access? Cost trade-off?
+2. **Custom AI provider configuration** — what's the operational complexity of bringing your own LLM provider key (Anthropic, OpenAI, etc.) vs using Tines' bundled access? Cost trade-off?
 3. **AI credit cost per Action execution** — exact credit consumption for typical agent workloads (10 tool calls, 8K-token context). Does it vary by model?
 4. **Token caps and context limits** — what's the max context size per agent invocation? Does Tines truncate or fail on overflow?
 5. **Audit log retention** — how long are AI Agent reasoning traces retained? Exportable for compliance?
@@ -251,9 +331,9 @@ Things to verify during the POC, with the Tines SE:
 
 ---
 
-## 12. CDW Use Case: Active Defense Grid Alignment
+## 12. Worked Example: Agentic SOC Triage with Cross-Pillar Containment
 
-The Active Defense Grid (Velocity pillar) requires automated decisions across alerts, with countermeasures executed across control planes. AI Agent fits squarely:
+Deterministic intake, AI-driven decision, deterministic countermeasures across control planes — the canonical hybrid pattern for an agentic-SOAR build:
 
 ```
 Alert ingested →
@@ -273,9 +353,9 @@ Alert ingested →
       → Network sub-Story (block IP)
       → Application sub-Story (revoke session)
   →
-  Audit trail to Records + ThreatConnect
+  Audit trail to Records + external TIP
 ```
 
-The CISO's CAPABILITY > VISIBILITY directive maps directly: detection → automated response, with the agent making the decision and deterministic sub-Stories executing the countermeasures.
+The agent makes the judgment call; deterministic sub-Stories execute the countermeasures. This split is what governance and audit teams want: every destructive action has structured, replayable, denylist-protected execution logic, and the AI's reasoning is captured in the event log without being on the destructive path.
 
-**Risk to test in POC**: agent decision quality at production volume. If accuracy < 95% on known cases, need stronger pre-filters or a human-in-the-loop checkpoint before destructive actions.
+**Risk to test before production rollout**: agent decision quality at real volume. If accuracy on known-correct cases drops below ~95%, add stronger deterministic pre-filters or insert a human-in-the-loop checkpoint before destructive actions. The numbers from public deployments (see [ai-production-patterns.md](ai-production-patterns.md) §13) suggest a 3-month parallel-run validation period before cutover.

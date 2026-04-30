@@ -154,7 +154,7 @@ Branch logic action.
 | **Automatic** | Tines picks based on context | Default; rarely useful in production designs |
 
 #### Deduplicate config
-- `path`: Liquid expression for the value to deduplicate on (e.g., `{{.alert.id}}`)
+- `path`: pill expression for the value to deduplicate on (e.g., `<<alert.body.id>>`)
 - `lookback`: window in days
 
 #### Explode config
@@ -356,10 +356,10 @@ If a vendor isn't in Connect Flows but has an API, use HTTP Request credential t
 
 ## 12. Formulas
 
-Tines uses Liquid-style template expressions with double angle brackets.
+Tines uses pill expressions wrapped in double angle brackets `<<...>>` (similar in look to but distinct from Liquid templating). The full cheatsheet — including 95%-of-real-use functions, worked examples, and common gotchas — lives in [formulas.md](formulas.md). Quick orientation only here.
 
 ### Referencing Data
-- Upstream action: `<<action_name.field>>` or `<<action_name.field.subfield>>`
+- Upstream action: `<<action_name.body.field>>` or `<<action_name.body.field.subfield>>`
 - Resource: `<<RESOURCE.name>>` or `<<RESOURCE.name.nested_key>>`
 - Story metadata: `<<STORY.name>>`, `<<STORY.team_id>>`
 - Tenant metadata: `<<META.tenant.domain>>`
@@ -367,7 +367,7 @@ Tines uses Liquid-style template expressions with double angle brackets.
 
 ### Common Patterns
 
-```liquid
+```
 # Conditional value
 <<IF(alert.severity == "high", "P1", "P2")>>
 
@@ -386,9 +386,6 @@ Tines uses Liquid-style template expressions with double angle brackets.
 # Hash for dedup
 <<SHA256(CONCAT(user, host, date))>>
 
-# Time math
-<<DATE_PARSE(timestamp, "%Y-%m-%d") + 86400>>
-
 # Token estimation before AI call
 <<ESTIMATED_TOKEN_COUNT(prompt_text)>>
 ```
@@ -399,9 +396,11 @@ Standard arithmetic (`+`, `-`, `*`, `/`), comparison (`==`, `!=`, `<`, `>`), log
 ### Prompts
 The `PROMPT` formula function makes a single-shot LLM call inline. Use for: extraction, classification, simple summarization. Don't use for multi-turn or tool-use — use AI Agent action for that.
 
-```liquid
+```
 <<PROMPT("Classify this alert as phishing, malware, or benign", alert.subject)>>
 ```
+
+For the full function catalog (string, array, date, parsing, conditional, lambdas, crypto, object construction), pill-vs-formula-field stringification rules, slug normalization behavior, and the catalog of formula gotchas (no `FORMAT_DATE`, `SWITCH` requires default, lazy evaluation, etc.) see [formulas.md](formulas.md).
 
 ---
 
@@ -534,37 +533,7 @@ Use Terraform when:
 
 ## 16. API
 
-REST API at `https://<tenant-domain>/api/v1/<endpoint>`.
-
-### Auth
-Bearer token in Authorization header:
-```
-Authorization: Bearer <api_key>
-```
-API keys are created in user settings. Scope to specific user; consider service-account users for automation.
-
-### Pagination
-Default 20 items per page. Override with `?per_page=N` (max varies by endpoint). Navigate with `?page=N` or follow `meta.next_page` in response.
-
-### Common Endpoints
-| Resource | Method + Endpoint |
-|---|---|
-| Stories | `GET /api/v1/stories` |
-| Single story | `GET /api/v1/stories/{id}` |
-| Create story | `POST /api/v1/stories` |
-| Actions | `GET /api/v1/actions?include_live_activity=true` |
-| Events | `GET /api/v1/events` (paginated, large; use filters) |
-| Credentials | `GET /api/v1/credentials` |
-| Resources | `GET /api/v1/resources` |
-| Teams | `GET /api/v1/teams` |
-| Users | `GET /api/v1/users` |
-| Audit logs | `GET /api/v1/audit_logs` |
-
-### Response Codes
-Standard HTTP semantics: 200 OK, 201 Created, 204 No Content, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 422 Unprocessable Entity, 429 Rate Limited, 500 Server Error.
-
-### Workflows-as-APIs (Webhook entry)
-Different from REST API — these are user-defined endpoints exposed by Stories with Webhook entry actions. URL pattern: `https://<tenant>/webhook/<path>/<secret>`. See Section 2.
+The full REST API reference, including authentication, pagination, all endpoints (with the corrected paths for credentials at `/api/v1/user_credentials` and resources at `/api/v1/global_resources`), action wiring quirks, action-logs endpoint for debugging, response codes, rate limits, Workflows-as-APIs pattern, Send-to-Story payload format, Terraform provider, and action type IDs, lives in [api.md](api.md).
 
 ---
 
@@ -578,6 +547,15 @@ Use cases:
 - Give engineers natural-language access to common Tines workflows from their AI tools
 
 Configuration: under Action Templates → MCP server. Define the tool name, description, input schema, and which Story executes when invoked.
+
+### Structural specifics that public docs underspecify
+
+- **MCP Server is not a distinct action type.** It is `Agents::WebhookAgent` with `options.mode = "mcp"`. POSTing `type: "Agents::McpServerAgent"` fails. The action is added from the UI Templates panel, not the main action picker — on Community Edition the Templates panel may be hidden entirely.
+- **Tools attached to an MCP Server are nested `Agents::GroupAgent` subroutines** containing `GroupInputAgent` (input schema) and `GroupOutputAgent` (return payload). The `tools` array on the MCP Server action is visible only in story exports — `GET /api/v1/actions/{id}` does not return it. Building a multi-tool MCP server fully via API is impractical without reverse-engineering the nested shape from an export.
+- **`tools/call` has a hard 30-second execution ceiling.** Anything slower returns `{"isError": true, "content": [{"type": "text", "text": "Tool execution timeout"}]}` to the caller; the underlying Tines chain still runs and emits events normally. Send-to-Story-as-tool adds invocation overhead on top of the target story's duration. Design tool chains to complete well under 30s, or redesign as async trigger+poll.
+- **Send-to-Story-as-MCP-tool auto-derives an empty input schema.** Tines uses the target story's name (snake_cased) for `tool.name`, copies the target story's name to `description` (your custom description is ignored), and leaves `inputSchema.properties` empty. Calling the tool with named arguments doesn't route them to the target story's webhook body — configure input-schema fields and argument mapping explicitly in the tool's UI config.
+
+See [gotchas.md](gotchas.md#2-mcp-server-is-not-a-distinct-action-type) for the full backstory.
 
 ---
 
@@ -607,7 +585,7 @@ Separate from regular credits as of 2026:
 
 ### Licensing: Tenant Users vs End Users
 Tines does not typically charge per-seat for most customers. Important distinction:
-- **Tenant users** are people who log into Tines directly (your EDA team, principal engineers, builders). These are sometimes counted in commercial agreements.
+- **Tenant users** are people who log into Tines directly (your automation team, principal engineers, builders). These are sometimes counted in commercial agreements.
 - **End users** are everyone consuming Tines workflows externally — Slack/Teams users interacting with bots, anonymous users hitting Pages, employees using Workbench. These typically do *not* consume seats.
 
 This matters operationally because: distributing chat agents to your full organization, building customer-facing Pages, or routing Slack/Teams interactions through Tines does not multiply per-seat costs. Verify your specific agreement during contract negotiation.

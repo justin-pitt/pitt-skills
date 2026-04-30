@@ -183,10 +183,10 @@ A growing governance concern: vendors introduce AI features to existing platform
 - Default to **opt out** of vendor AI features whose data residency you cannot control
 - Re-evaluate vendor risk classifications when AI is introduced — a low-risk vendor processing logs becomes a higher-risk vendor when those logs go through an LLM
 
-### CDW-specific considerations
-- Tines (your proposed Plan B SOAR) runs AI inference on Tines infrastructure with documented data residency, no logging, and no training use. Validate this in writing during contract negotiation.
-- Other vendors in your stack (CrowdStrike, Microsoft Entra, Akamai, ThreatConnect, Polarity, ServiceNow, Proofpoint) have all introduced AI features in recent product cycles. Inventory which are enabled, what data flows where.
-- Some vendors will respect customer opt-out from AI training; some will not. Verify in writing.
+### Practical considerations when adopting Tines
+- Tines runs AI inference on Tines infrastructure with documented data residency, no logging, and no training use of customer data. Validate this in writing during contract negotiation.
+- Most security stacks (EDR, identity provider, CDN/WAF, TIP, threat-intel overlay, ITSM, email security) have all introduced AI features in recent product cycles. Inventory which are enabled, what data flows where, before assuming AI exposure ends at the obvious AI products.
+- Some vendors will respect customer opt-out from AI training; some will not. Verify in writing per vendor.
 
 ---
 
@@ -211,37 +211,37 @@ For each AI workflow before production deployment:
 
 ---
 
-## 7. Application to CDW
+## 7. Operationalizing the Framework
 
-### How this aligns with Project Leap and the Active Defense Grid
-The CISO's CAPABILITY > VISIBILITY directive demands automated countermeasures at machine speed. Governance is what makes that defensible. Without it, the first time an AI Agent makes a wrong call on the Active Defense Grid, the program loses credibility.
+### Aligning the framework with a "capability-first" security strategy
+Many SOC organizations are moving toward a posture that prioritizes automated countermeasures over passive visibility. Governance is what makes that defensible. Without it, the first time an AI Agent makes a wrong call in production, the program loses credibility.
 
-The governance framework supports the CISO directive by:
+The framework above supports a capability-first directive by:
 - Enabling speed where speed is safe (Low and Medium tier with appropriate guardrails)
 - Constraining speed where speed is dangerous (High and Critical tier with human gates)
 - Producing the audit trail that turns AI decisions from "the AI did it" into "the AI followed the documented policy and process"
 
-### Stakeholder mapping for CDW
+### Stakeholder mapping (typical roles)
 
-| Governance Component | CDW Owner |
+| Governance Component | Typical Owner |
 |---|---|
-| AI policy authority | CISO (Marcos) — sets tolerance and high-level guardrails |
-| Workflow approval (production) | EDA Manager (Rick) — approves Tines workflows for production |
-| Compliance / regulatory governance | SRM (Amna, Director) — ensures AI use aligns with CDW's compliance posture |
+| AI policy authority | CISO — sets tolerance and high-level guardrails |
+| Workflow approval (production) | SOC / SecOps engineering manager — approves AI workflows for production |
+| Compliance / regulatory governance | Risk / SRM director — ensures AI use aligns with the org's compliance posture |
 | Privacy and data classification | SRM team + Privacy / Legal |
-| Risk acceptance for Critical-tier workflows | CISO + Director CER (Charity) |
-| Audit and reporting | EDA team builds; Compliance reviews |
-| Vendor AI risk | SRM (Tammy / Amna for compliance dashboards); EDA owns Tines specifically |
+| Risk acceptance for Critical-tier workflows | CISO + relevant business-area director |
+| Audit and reporting | SecOps engineering builds; Compliance reviews |
+| Vendor AI risk | SRM owns the compliance dashboard; SecOps engineering owns specific AI-platform vendors |
 
-The governance work is not solely EDA's. Position it as a cross-functional artifact — that's how it actually gets adopted at scale.
+The governance work is not solely SecOps engineering's. Position it as a cross-functional artifact — that's how it actually gets adopted at scale.
 
-### What to bring to Charity (Director, CER)
-Charity's top pain point is M&A integration at scale. Governance directly addresses this: every acquired company brings its own AI tools, AI policies (or absence of them), and shadow AI. A documented CER-wide AI governance framework gives M&A integrations a clear "what to align to" target — reducing integration time, which is exactly her goal.
+### Engaging directors / VPs
+- Lead with the business problem each role already cares about (M&A integration, audit posture, compliance scope, incident credibility) and show how the governance framework reduces friction for *that* problem.
+- Don't bring the framework to executive sponsors before you have at least one production AI workflow demonstrating it in practice. Bring data, not theory.
 
-Position the governance framework as an M&A integration accelerator, not a SOC compliance overhead. That framing lands better with her stated priorities.
-
-### What to bring to Marcos (CISO) when timing is right
-The high-performing vs add-on framing maps directly to his CAPABILITY > VISIBILITY directive. The framework above is what gets CDW into the high-performing camp. Don't bring this to him before you have at least one production AI workflow demonstrating the framework in practice — bring data, not theory.
+### Engaging the CISO
+- The high-performing vs add-on framing maps directly to a "capability over visibility" mandate. Use that mapping rather than presenting the framework abstractly.
+- Frame governance as the prerequisite for *more* automation, not a brake on it. Every Critical-tier guardrail is what makes Low and Medium-tier AI work credible to the audit committee.
 
 ---
 
