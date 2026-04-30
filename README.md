@@ -28,6 +28,13 @@ pwsh ./scripts/install.ps1     # Windows
 
 To remove the wiring later, pass `-Uninstall` (PowerShell) or `--uninstall` (Bash). It removes the symlinks and strips the `pitt-skills` keys from `settings.json`, leaving everything else alone.
 
+## Updating
+
+New installs always pull the latest. Existing installs need a refresh when a new version ships:
+
+- **Claude Code**: `/plugin marketplace update pitt-skills`, then restart any open sessions. Without this, Claude Code keeps reading from the cache directory that was populated at first install (`~/.claude/plugins/cache/pitt-skills/pitt-skills/<version>/`) and never sees the new content.
+- **Copilot CLI**: `git -C ~/Code/pitt-skills pull`. The `~/.copilot/instructions/` symlink points at the cloned working copy, so a checkout refresh is all that's needed.
+
 ## VS Code Chat — manual fallback (no symlinks)
 
 If your environment blocks symlinks, add to your VS Code user settings.json:
