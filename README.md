@@ -46,6 +46,16 @@ Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/supe
 
 See [docs/authoring-a-skill.md](docs/authoring-a-skill.md).
 
+## Contributing
+
+After cloning, enable the build-verify pre-commit hook so SKILL.md edits never ship without their regenerated Copilot mirrors:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook needs `pwsh` 7+ on `PATH` (or at one of the standard Windows install locations). Skip it for an individual commit with `git commit --no-verify`.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
