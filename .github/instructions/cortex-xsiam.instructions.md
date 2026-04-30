@@ -1,90 +1,113 @@
 ---
 applyTo: "**"
-description: Cortex XSIAM (Extended Security Intelligence and Automation Management) by Palo Alto Networks — the AI-driven SOC platform unifying SIEM, SOAR, XDR, EDR, ASM, UEBA, TIP, and CDR. Use this skill whenever the user mentions XSIAM, Cortex, XQL queries, correlation rules, BIOC rules, parsing rules, data modeling rules, XDM (Cortex Data Model), XSOAR playbooks in XSIAM, incident investigation, threat hunting, alert triage, data ingestion, causality chains, the Cortex Marketplace, content packs, dashboards, widgets, XSIAM APIs, Broker VM, or any SOC automation and detection engineering tasks within the Palo Alto Cortex ecosystem. Also trigger when the user asks about writing detection rules, building custom integrations, onboarding log sources, creating automations, or investigating security incidents — even if they don't explicitly say "XSIAM." This skill covers XQL syntax, data pipelines, detection engineering, SOAR automation, and operational best practices.
+description: Cortex XSIAM (Extended Security Intelligence and Automation Management) by Palo Alto Networks - the AI-driven SOC platform unifying SIEM, SOAR, XDR, EDR, ASM, UEBA, TIP, and CDR. Use this skill whenever the user mentions XSIAM, Cortex, XQL queries, correlation rules, BIOC rules, parsing rules, data modeling rules, XDM (Cortex Data Model), XSOAR playbooks in XSIAM, case or issue or incident investigation, threat hunting, alert triage, data ingestion, causality chains, the Cortex Marketplace, content packs, dashboards, widgets, XSIAM APIs, Broker VM, Identity Threat Module, Attack Surface Management, endpoint protection profiles, engines, or any SOC automation and detection engineering tasks within the Palo Alto Cortex ecosystem. Also trigger when the user asks about writing detection rules, building custom integrations, onboarding log sources, creating automations, or investigating security cases - even if they don't explicitly say "XSIAM." This skill covers XQL syntax, data pipelines, detection engineering, SOAR automation, identity threat, ASM, endpoint protection, engines, tenant administration, and operational best practices.
 ---
 
 # Cortex XSIAM Skill
+
+## Terminology Note
+
+> **XSIAM has two overlapping detection surfaces and one grouping entity:**
+>
+> - **Alerts surface** - older XDR alerts surface. The Alerts page lists detections from data sources (Splunk, CrowdStrike, MSFT Defender, Azure AD, Okta, Palo Alto NGFW, etc.). API: `POST /public_api/v1/alerts/get_alerts/`, `alerts` dataset.
+>
+> - **Issues surface** - modern unified XSIAM detection surface. The Issues page lists detections from any detection method: `CORRELATION`, `XDR_ANALYTICS`, `XDR_ANALYTICS_BIOC`, `XDR_BIOC`, `VULNERABILITY_POLICY`, `ASM`, `CSPM_SCANNER`, `CUSTOM_ALERT`. API: `POST /public_api/v1/issue/search/`, `issues` dataset. Most analyst triage starts here because it's the unified view.
+>
+>   The two surfaces share IDs but return different field shapes - calling them by the same ID against different endpoints returns different objects.
+>
+> - **Case** - top-level grouping for related issues. The primary working object for SOC analysts. AI-driven grouping stitches issues sharing entities (host, user, hash, IP) and attack patterns into one case. Cases carry severity, status, assignee, SLAs. API: `case_id` field, with an `issues` array listing member issues.
+>
+> **"Incident" - separate from "case."** Palo Alto's older XDR/XSOAR APIs use "incident" as a grouping entity (`/incidents/`, `demisto.incidents()`, `fetch-incidents`). At the API level, **cases and incidents are separate, both still active.** Cases bridge to incidents via `custom_fields.incident_id`. Don't conflate them.
+>
+> **Field schema gotchas:**
+> - `parent` context fields exist on issues but **do not appear in default API responses** and are not in any Palo Alto public documentation. They are effectively hidden by default - Palo Alto support discloses both names and request shape on request.
+> - Reads (`/alerts/get_alerts/`, `/issue/search/`) require **integer** IDs in `id` / `alert_id_list` filters. Writes (`/alerts/update_alerts/`) require **string** IDs in payload.
+> - Issue resolution writes route through `alerts/update_alerts/` even though the entity is an issue.
+>
+> See [references/xsiam-api.md](references/xsiam-api.md) for the working contract per endpoint.
 
 ## What This Skill Covers
 
 This skill helps you work effectively with Palo Alto Networks Cortex XSIAM across its major functional areas:
 
-1. **XQL (XDR Query Language)** — Writing queries for threat hunting, investigation, dashboards, and detection rules
-2. **Detection Engineering** — Correlation rules, BIOC rules, analytics alerts
-3. **Data Pipeline** — Data ingestion, parsing rules, data model (XDM) rules, datasets
-4. **SOAR & Automation** — Playbooks, integrations, scripts, the Cortex Marketplace
-5. **Incident Management** — Alert triage, incident investigation, causality chains, response actions
-6. **Platform Operations** — Dashboards, widgets, reports, APIs, Broker VM, agent management
-
-## Quick Orientation
-
-Cortex XSIAM is a cloud-delivered, AI-driven security operations platform. It replaces traditional SIEM + SOAR + XDR point products with a single unified platform. Key architectural concepts:
-
-- **Data Foundation**: All telemetry (endpoint, network, cloud, identity, third-party) is ingested, parsed, normalized to XDM, and stored in **datasets** (queryable tables)
-- **Analytics Engine**: 2,900+ ML models, BIOC/ABIOC rules, correlation rules, and IOC matching run against ingested data to generate **alerts**
-- **Alert-to-Incident Pipeline**: Alerts are grouped into **incidents** via intelligent stitching and AI-driven scoring; routine incidents are auto-handled
-- **Causality Chain**: When a detection fires, XSIAM builds the full chain of processes/events leading to the alert, with a **Causality Group Owner (CGO)** identified as the root cause
-- **SOAR Engine**: Embedded playbook engine (based on Cortex XSOAR) with visual editor, marketplace content packs, and custom automation
-- **Attack Surface Management (ASM)**: Continuous discovery of internet-facing assets and vulnerabilities
-- **Cortex Copilot**: Built-in AI assistant for investigation assistance and threat research within the XSIAM interface
+1. **XQL (XDR Query Language)** - Writing queries for threat hunting, investigation, dashboards, and detection rules
+2. **Detection Engineering** - Correlation rules, BIOC rules, analytics alerts
+3. **Data Pipeline** - Data ingestion, parsing rules, data model (XDM) rules, datasets
+4. **SOAR & Automation** - Playbooks, integrations, scripts, the Cortex Marketplace
+5. **Case Management** - Triage, case investigation, causality chains, response actions
+6. **Platform Operations** - Dashboards, widgets, reports, APIs, Broker VM, agent management
+7. **Identity Threat** - Identity Analytics, Identity Threat Module (ITM), Cloud Identity Engine
+8. **Attack Surface Management** - External asset discovery, ASM rules, attack surface testing
+9. **Endpoint Protection** - Profiles, exception mechanisms, host hardening
+10. **Engines** - Runtime substrate for playbooks, scripts, and integrations
+11. **Tenant Administration** - Cortex Gateway, BYOK, Remote Repository, RBAC, SSO
 
 ## Reference Files
 
 Read these files for detailed guidance on specific topics. **Always read the relevant reference file before answering detailed questions.**
 
-| File | When to Read |
+| File | When to read (concrete trigger phrases) |
 |---|---|
-| `references/xql-reference-v3.md` | Any XQL query writing, syntax questions, datasets, operators, functions, stages, examples, CDW dataset names, alerts field schema |
-| `references/detection-engineering.md` | Correlation rules, BIOC rules, IOC rules, ABIOC, alert tuning, MITRE ATT&CK mapping |
-| `references/data-pipeline.md` | Data ingestion, parsing rules, data model rules, XDM schema, custom datasets, Broker VM, log onboarding |
-| `references/soar-automation.md` | Playbooks, integrations, scripts, marketplace content packs, automation design patterns |
-| `references/soar-development.md` | Building custom integrations, Python code conventions, YAML metadata, content pack structure, unit testing, demisto-sdk CLI commands, reputation commands |
-| `references/xsiam-api.md` | XSIAM REST API authentication, XQL query API async flow, event collector integrations, mirroring patterns, long-running containers, integration cache, API endpoint catalog |
-| `references/case-ops.md` | Case lifecycle (CDW terminology), alert-to-case pipeline, causality views, investigation workflow, response actions, operational dashboards |
-| `references/xsiam-environment-audit-queries.md` | Pre-built XQL queries for auditing the CDW XSIAM environment: data sources, parsing rule coverage, correlation rule inventory, alert volumes by source, content pack inventory |
+| [references/xql-reference.md](references/xql-reference.md) | Writing or debugging XQL - syntax, datasets, operators, functions, stages, examples, performance |
+| [references/detection-engineering.md](references/detection-engineering.md) | Authoring or tuning correlation, BIOC, IOC, ABIOC rules; alert mapping; MITRE ATT&CK classification |
+| [references/data-pipeline.md](references/data-pipeline.md) | Onboarding a log source, parsing rules, data model rules, XDM mapping, custom datasets, Broker VM, XDRC, **data retention + cold storage**, **AI Detection & Response (AIDR)** |
+| [references/soar-automation.md](references/soar-automation.md) | Designing or debugging playbooks, integration instances, content packs, **Marketplace lifecycle / support tiers / version-pin**, automation patterns |
+| [references/soar-development.md](references/soar-development.md) | Building custom integrations or scripts - Python/JS conventions, YAML metadata, demisto-sdk, content pack structure, conditional task YAML grammar, unit tests, reputation commands |
+| [references/case-ops.md](references/case-ops.md) | Investigating a case - War Room, Causality View, Timeline, **Action Center**, response actions (isolate, live terminal, search-and-destroy, memory image, remediate changes), CLI commands |
+| [references/case-customization.md](references/case-customization.md) | Customizing case/alert UX - incident scoring & starring, custom fields, layouts, timer fields & SLAs, automation rules, custom statuses, incident domains |
+| [references/identity-threat.md](references/identity-threat.md) | Identity Analytics, Identity Threat Module (ITM add-on), Cloud Identity Engine, risky users/hosts, honey users, asset roles, asset scores |
+| [references/endpoint-protection.md](references/endpoint-protection.md) | Endpoint profiles (malware/exploit/restrictions/agent settings), exception rules (alert exclusion, disable prevention, IOC/BIOC exception, support exception, global policy exception), endpoint hardening, host firewall, disk encryption, vuln assessment |
+| [references/attack-surface-mgmt.md](references/attack-surface-mgmt.md) | ASM - external services/IPs/websites discovery, scanning cadence, externally inferred CVEs, Threat Response Center, Attack Surface Testing, attack surface rules |
+| [references/engines.md](references/engines.md) | Engines - runtime substrate for playbooks/scripts/integrations, Docker/Podman, install/upgrade/remove, d1.conf configuration, load-balancing groups, web-proxy setup |
+| [references/tenant-administration.md](references/tenant-administration.md) | Tenant onboarding - Cortex Gateway, BYOK, native Remote Repository (dev→prod content sync), RBAC roles + user scope, SSO/SAML setup (Okta, Azure AD) |
+| [references/xsiam-api.md](references/xsiam-api.md) | Calling the XSIAM API directly - endpoints, auth headers, request/response shapes, ID-type quirks, async write behavior, status enums, `parentIncidentFields` |
+| [references/xsiam-environment-audit-queries.md](references/xsiam-environment-audit-queries.md) | Pre-built XQL queries for auditing a tenant: data sources, parsing rule coverage, correlation rule inventory, alert volumes by source, content pack inventory |
 
-## Core Architecture
+## Top Rules
+
+When helping with XSIAM tasks:
+
+1. **Specify the dataset** in every XQL query - don't rely on defaults unless the user is explicitly querying `xdr_data`.
+2. **Use XDM-normalized fields** (`xdm.*`) for cross-source queries; raw dataset fields for vendor-specific queries.
+3. **Map correlation rule alert fields** to improve case grouping - minimum: hostname, username, IP, alert name.
+4. **Test XQL in the Query Builder** before deploying in correlation rules, dashboards, or scheduled queries.
+5. **Watch the 5,000-hit auto-disable** - correlation rules exceeding 5,000 hits per 24h are automatically disabled.
+6. **Verify dataset names in the tenant** - `alerts` vs `xdr_alerts` and similar pairs vary between XDR and XSIAM tenants.
+7. **Mind Compute Unit (CU) consumption** - filter early, `fields` to limit columns, avoid unfiltered full-dataset scans in production queries and scheduled rules.
+8. **Reference MITRE ATT&CK** tactics/techniques on detection rules for proper classification.
+9. **Use precise terminology** - "alert," "issue," "case," and "incident" are distinct entities (see terminology block above). Don't conflate.
+10. **Reach for the Marketplace first** for integrations and content packs before custom-building.
+
+## Quick Orientation
+
+Cortex XSIAM is a cloud-delivered, AI-driven SOC platform combining SIEM, SOAR, XDR, EDR, ASM, UEBA, TIP, and CDR.
 
 ### Sensors & Data Collection
 
-- **Cortex XDR Agent**: Endpoint sensor deployed on Windows, Mac, Linux, Android. Provides EDR telemetry, malware prevention, exploit prevention, and response capabilities.
-- **Broker VM**: On-premise virtual machine for data collection. Runs collector applets for Syslog, Kafka, CSV, Database, NetFlow, WEC, and other protocols.
-- **XDR Collector (XDRC)**: On-premise data collector for Windows/Linux using Filebeat and Winlogbeat for centralized log collection. Distinct from the XDR agent — XDRC collects logs from infrastructure, while the agent provides endpoint protection and telemetry.
-- **Cloud-to-Cloud Integrations**: API-based collectors for SaaS and cloud provider logs (Azure AD, O365, AWS, GCP, etc.)
-- **Palo Alto Firewalls**: VM-Series, hardware NGFW, Prisma Access, and GlobalProtect forward logs via Strata Logging Service.
+- **Cortex XDR Agent** - endpoint sensor on Windows/Mac/Linux/Android. EDR telemetry, malware/exploit prevention, response.
+- **Broker VM** - on-prem VM running collector applets (Syslog, Kafka, CSV, DB, NetFlow, WEC, etc.). **XDR Collector (XDRC)** is a separate Filebeat/Winlogbeat-based log collector - distinct from the XDR agent.
+- **Cloud-to-Cloud + NGFW** - API collectors for SaaS (Azure AD, O365, AWS, GCP). Palo Alto firewalls forward via Strata Logging Service.
 
 ### Cortex Data Model (XDM)
 
-The normalized data schema used across the platform. All ingested data gets normalized into XDM fields for consistent cross-source querying. The data pipeline flow is:
+The normalized cross-source schema. Pipeline flow:
 
-**Raw Logs → Parsing Rules (ingestion-time) → Dataset → Data Model Rules (query-time) → XDM fields**
+**Raw Logs → Parsing Rules (ingest-time) → Dataset → Data Model Rules (query-time) → XDM fields**
+
+Use `xdm.*` for cross-source queries; raw dataset fields for vendor-specific work.
 
 ### Causality
 
-Causality is XSIAM's automated story-building capability. The platform continuously stitches all collected data points (processes, files, network connections, etc.) into causality chains.
+XSIAM stitches processes/files/network/cloud events into causality chains automatically.
 
-Key causality concepts:
-- **Causality Group Owner (CGO)**: The root process in a causality chain.
-- **Causality Chain**: The full tree of process relationships stemming from a CGO.
-- **Spawners**: Processes that spawn other sub-processes as part of normal OS flow. Common spawners include `explorer.exe`, `services.exe`, `wininit.exe`, `userinit.exe`. Knowing these is critical for distinguishing normal process ancestry from suspicious execution chains.
-- **Causality Analysis Engine**: Automatically builds and analyzes causality chains.
-- **Causality View**: Visual representation showing network, cloud, and SaaS causality relationships.
+- **Causality Group Owner (CGO)** - root process of a chain.
+- **Causality Chain** - full tree under the CGO.
+- **Spawners** - normal-OS parent processes (`explorer.exe`, `services.exe`, `wininit.exe`, `userinit.exe`); know these to distinguish benign vs. suspicious ancestry.
+- **Causality View** - visual surface for process, network, cloud, and SaaS causality.
 
-### Incidents and Alerts
+### Cases, Issues, Alerts
 
-- **Alert**: A single security event generated by a detection rule, analytics engine, or external source. Has fields, types, and associated playbooks.
-- **Incident**: A collection of one or more related alerts grouped together via AI-driven grouping. Has severity, status, assignee, SLAs, and custom fields.
-- **Incident Scoring**: AI-driven prioritization based on overall risk assessment.
-- **Incident Starring**: Manual prioritization mechanism for analyst workflow.
-- **Alert Exclusion**: Rules to suppress known false positives.
-
-**Incident Lifecycle:**
-1. Data is ingested from sensors, integrations, and external sources
-2. Detection rules, analytics, and correlation rules generate alerts
-3. Alerts are grouped into incidents via AI-driven grouping
-4. Playbooks automatically run on incidents for enrichment and response
-5. Analysts investigate using the War Room, Causality View, and Timeline
-6. Incidents are resolved with resolution reasons and status updates
+See the terminology block above for the verified definitions. The short version: **Alerts** (older XDR surface) and **Issues** (modern unified surface) are detection events; **Cases** group related issues for analyst work; **Incidents** are a separate Palo Alto grouping concept that still exists at the API level. Cases are the primary working object for SOC analysts on XSIAM.
 
 ### Detection Rules
 
@@ -97,107 +120,6 @@ Key causality concepts:
 | **Attack Surface Rules** | Rules for external-facing asset risk detection | ASM-driven detections |
 | **Palo Alto Built-in** | Pre-built detections delivered by Palo Alto, continuously updated | Broad coverage, zero configuration |
 
-## SOAR & Automation
-
-### Content Packs
-
-All XSIAM/XSOAR content is organized in **Packs** — bundles of artifacts that implement use cases. Available through the Cortex Marketplace. Packs can include integrations, automations, playbooks, incident types, widgets, layouts, classifiers, mappers, and more.
-
-### Integrations
-
-Product integrations are how XSIAM communicates with other products via REST APIs, webhooks, etc.
-
-Key concepts:
-- Each integration can have multiple **instances** (e.g., different environments or tenants)
-- Integrations run on **engines** — Docker or Podman containers deployed on-premise or in cloud
-- Categories include: Analytics/SIEM, Authentication, Case Management, Data Enrichment, Threat Intelligence, Database, Endpoint, Forensics/Malware Analysis, IT Services, Messaging, Network Security, Vulnerability Management
-
-### Playbooks
-
-Playbooks are task-based graphical workflows that automate security response. Written in YAML format.
-
-**Task Types:**
-- **Manual**: Require analyst interaction (confirm info, escalate alerts)
-- **Conditional**: Branch based on values/parameters
-- **Communication**: Interact with users in the organization (email, Slack, etc.)
-- **Automation**: Run integration commands, scripts, or sub-playbooks
-
-**Key Features:**
-- Sub-playbooks for modular design
-- Filters and transformers for data manipulation
-- Playbook polling for async operations
-- Playbook triggers for alerts
-- Context data access (alert context, incident context, search context)
-
-### Context Data
-
-Every incident and playbook has a **JSON context store**. All integration command and automation script results are stored in context. This is how different tasks share data within a playbook workflow. Example: `!whois query="cnn.com"` stores results in context for downstream tasks to consume.
-
-### Scripts (Automations)
-
-Scripts perform specific actions and are used within playbook tasks and CLI commands. Written in Python or JavaScript. Scripts can access all XSIAM/XSOAR APIs, including incidents, investigations, and War Room data.
-
-### Jobs
-
-Scheduled events triggered by time or feed updates. Can trigger playbooks on schedule (e.g., run TIM feed playbook when feed data changes, run a daily cleanup playbook).
-
-### Lists
-
-Reusable data structures (JSON lists, arrays) that can be referenced across playbooks and automations. Useful for maintaining allow/block lists, configuration data, threshold values, etc.
-
-## Investigation & Response
-
-### War Room
-
-Chronological journal of all investigation actions, artifacts, and collaboration for an incident. Analysts can run commands and playbooks directly from the War Room. All actions are logged for audit trail.
-
-### CLI Commands
-
-Two command types are available in the War Room and Playground:
-- **System commands**: Prefixed with `/` (e.g., `/playground_create`, `/close_investigation`)
-- **External commands**: Prefixed with `!` (e.g., `!ip`, `!whois`, `!domain`) — these execute integration commands
-
-### Playground
-
-Non-production environment for testing automations, scripts, APIs, and commands without affecting live investigations. Use this to validate playbook logic, test new integrations, and develop custom scripts.
-
-### Response Actions
-
-Available response actions for endpoint and network containment:
-- **Live Terminal**: Interactive command-line session on an endpoint
-- **Endpoint Isolation**: Network-isolate a compromised endpoint (maintains agent communication)
-- **Pause Endpoint Protection**: Temporarily disable protection modules for troubleshooting
-- **Remediate Malicious Changes**: Reverse changes made by malicious processes
-- **Run Scripts on Endpoints**: Execute remediation or collection scripts remotely
-- **Search and Destroy**: Find and remove malicious files across endpoints
-- **External Dynamic Lists**: Push indicators to NGFW block lists
-- **Memory Image Collection**: Capture memory dumps for forensic analysis
-
-### Alert Investigation Views
-
-- **Alert Side Panel**: Quick view of alert details without leaving the incident
-- **Causality View**: Visual process tree (network, cloud, SaaS variants)
-- **Timeline View**: Chronological event sequence
-- **Analytics Alert View**: ML model details and scoring for analytics-generated alerts
-
-## General Guidelines
-
-When helping with XSIAM tasks:
-
-1. **Always specify the dataset** when writing XQL queries — don't rely on defaults unless the user is querying `xdr_data`
-2. **Use XDM-normalized fields** (`xdm.*`) for cross-source queries; use raw dataset fields for vendor-specific queries
-3. **Follow the data pipeline order**: Raw Logs → Parsing Rules (ingestion-time) → Dataset → Data Model Rules (query-time) → XDM fields
-4. **Map correlation rule alert fields** to improve incident grouping — always include at minimum: hostname, username, IP, alert name
-5. **Use the Cortex Marketplace** as the first option for integrations and content packs before building custom solutions
-6. **Test XQL in the Query Builder** before deploying in correlation rules or dashboards
-7. **Comment XQL queries** using `//` for maintainability
-8. **Consider real-time vs scheduled** execution for correlation rules — XSIAM can detect if a query is eligible for real-time processing
-9. **For playbooks**, follow the modular pattern: investigation sub-playbook → containment → eradication → recovery
-10. **Reference MITRE ATT&CK** tactics and techniques when creating detection rules for proper classification
-11. **Watch the 5,000-hit auto-disable threshold** — correlation rules exceeding 5,000 hits in 24 hours are automatically disabled
-12. **Verify dataset names in the tenant** — dataset names (especially `alerts` vs `xdr_alerts`) vary between XDR and XSIAM tenants
-13. **Mind Compute Unit (CU) consumption** — XQL queries consume CUs from an annual quota. Filter early, use `fields` to limit columns, and avoid unfiltered full-dataset scans in production queries and scheduled correlation rules
-
 ## Key Navigation Paths in XSIAM UI
 
 - **XQL Query Builder**: Incident Response → Investigation → Query Builder
@@ -208,10 +130,12 @@ When helping with XSIAM tasks:
 - **Playbooks**: Incident Response → Automation → Playbooks
 - **Marketplace**: Settings → Configurations → Content Management → Marketplace
 - **Dashboards**: Dashboards (top nav)
-- **Incidents**: Incident Response → Incidents
+- **Cases**: Incident Response → Incidents *(UI label may still say "Incidents" - this is where cases live)*
 - **Endpoints**: Assets → Endpoints
 - **Playground**: Incident Response → Investigation → Playground
 - **Quick Launcher**: Keyboard shortcut for fast navigation and action execution
+
+> **UI Note**: Some XSIAM navigation labels still use "Incident" (e.g., "Incident Response" menu). These are Palo Alto's default UI labels - the objects you're working with are cases.
 
 ## Common XQL Patterns (Quick Reference)
 
@@ -273,22 +197,26 @@ When building custom content packs, integrations, or automations:
 
 | Term | Definition |
 |---|---|
-| **ABIOCs** | Analytics Behavioral Indicators of Compromise — ML-driven behavioral detections |
-| **ASM** | Attack Surface Management — continuous external asset discovery |
-| **BIOCs** | Behavioral Indicators of Compromise — pattern-based endpoint detections |
-| **Broker VM** | On-premise virtual machine for data collection via applets |
-| **BYOML** | Bring Your Own Machine Learning — custom ML model integration |
+| **Alert** | A detection event from a data source (Splunk, CrowdStrike, MSFT Defender, Azure AD, etc.) or XSIAM analytics, surfaced on the Alerts page. Older XDR concept; lives in the `alerts` dataset. |
+| **Issue** | A detection event surfaced on the Issues page from any detection method (correlation, BIOC, ABIOC, IOC, analytics, ASM, vulnerability, custom). Modern unified detection entity; lives in the `issues` dataset. |
+| **Case** | Top-level grouping of related issues. The primary working object for SOC analysts. Carries severity, status, assignee, SLAs. |
+| **Incident** | Palo Alto's older XDR/XSOAR grouping concept, separate from "case" at the API level. Both are still active. Cases bridge to incidents via `custom_fields.incident_id`. |
+| **CGO** | Causality Group Owner - root process in a causality chain |
+| **XDM** | Cortex Data Model - normalized data schema |
+| **BIOC** | Behavioral Indicators of Compromise - pattern-based endpoint detections |
+| **ABIOC** | Analytics Behavioral Indicators of Compromise - ML-driven behavioral detections |
+| **ASM** | Attack Surface Management - continuous external asset discovery |
+| **BYOML** | Bring Your Own Machine Learning - custom ML model integration |
 | **CDR** | Cloud Detection and Response |
-| **CGO** | Causality Group Owner — root process in a causality chain |
 | **DBot** | Automated reputation scoring engine for indicators |
-| **IOC** | Indicator of Compromise — known malicious indicators |
-| **ITDR** | Identity Threat Detection and Response |
+| **IOC** | Indicator of Compromise - known malicious indicators |
+| **ITDR / ITM** | Identity Threat Detection and Response / Identity Threat Module |
 | **NGFW** | Next-Generation Firewall |
 | **TIM** | Threat Intelligence Management |
 | **UEBA** | User and Entity Behavior Analytics |
 | **WEC** | Windows Event Collector |
-| **XDM** | Cortex Data Model — normalized data schema |
-| **XDRC** | XDR Collector — on-premise log collector using Filebeat/Winlogbeat, distinct from XDR agent |
+| **Broker VM** | On-premise virtual machine for data collection via applets |
+| **XDRC** | XDR Collector - on-premise log collector using Filebeat/Winlogbeat, distinct from XDR agent |
 | **XQL** | XSIAM Query Language |
 
 ## Key Documentation Links
