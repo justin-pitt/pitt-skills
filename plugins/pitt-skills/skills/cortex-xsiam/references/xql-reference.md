@@ -95,8 +95,8 @@ If no dataset is specified, the query runs against `xdr_data`. You can change th
 | `incidents` | Incident data | Available in XSIAM for dashboard/widget queries |
 | `incidents_artifacts` | Incident artifact data | XSIAM-specific |
 | `incidents_assets` | Incident asset data | XSIAM-specific |
-| `endpoints` | Endpoint inventory and status | Requires Endpoint Admin or Investigator role |
-| `host_inventory` | Host inventory data | Excluded from retention enforcement |
+| `endpoints` | Endpoint inventory and status | Requires Endpoint Admin or Investigator role. **May be empty on tenants without Cortex XDR Agent** - third-party EDRs do not populate this dataset. Use the `/endpoints/get_endpoint/` PAPI endpoint for agent inventory in that case. |
+| `host_inventory` | Host inventory data | Excluded from retention enforcement. **May be empty on tenants without Cortex XDR Agent**, same as `endpoints`. |
 | `cloud_audit_log` | Cloud provider audit logs | Used by BIOC rules |
 | `correlationsauditing` | Correlation rule audit logs | Tracks rule creation, modification, enable/disable. **Confirmed unavailable in some tenants.** If needed, export rule list from Detection & Threat Intel → Detection Rules → Correlations UI. |
 | `panw_ngfw_traffic_raw` | Palo Alto NGFW traffic logs | Via Strata Logging Service |
@@ -1173,3 +1173,12 @@ Key facts:
 - Fields like `user_name` in the `alerts` dataset are array types
 - Use `arrayexpand user_name` before `comp count_distinct(user_name)`
 - Alternatively, use `arrayindex(user_name, 0)` to extract the first element
+
+### `status: FAIL` with no error string when referencing a single field
+Some XSIAM result-projection fields are read-only metadata: they render in row output via `| fields <name>` but error silently in any expression that references them. `insert_timestamp` on `xdr_data` is the canonical example.
+
+- `dataset = xdr_data | fields insert_timestamp | limit 1` succeeds and shows the value
+- `dataset = xdr_data | alter a = to_integer(insert_timestamp)` returns `status: FAIL` with no `error` field in the response
+- Side-by-side comparison: `to_integer(_reception_time)` succeeds (real column), `to_integer(insert_timestamp)` fails (projection-only metadata)
+- Probe a candidate field with `dataset = <ds> | alter a = to_integer(<field>) | fields a | limit 1`. Silent FAIL = projection-only; success = real column
+- For ingestion-lag-style work, use `_reception_time` (numeric epoch ms, expression-accessible) plus `to_timestamp(_reception_time, "MILLIS")` and `timestamp_diff(...)` as the workaround. The truer event-to-insert lag using `insert_timestamp` is not currently expressible in XQL.
