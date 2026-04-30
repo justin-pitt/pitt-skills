@@ -14,6 +14,7 @@
     }
   },
   "enabledPlugins": {
-    "pitt-skills@pitt-skills": true
+    "pitt-skills@pitt-skills": true,
+    "superpowers@superpowers-dev": true
   }
 }
