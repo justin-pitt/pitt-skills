@@ -129,7 +129,7 @@ alter
     xdm.target.ipv4 = dst_ip,
     xdm.target.port = to_integer(dst_port),
     xdm.event.type = action,
-    xdm.event.outcome = if(action = "allow", XDM_CONST.OUTCOME_SUCCESS, XDM_CONST.OUTCOME_FAILURE),
+    xdm.event.outcome = if(action = "allow", XDM_CONST.OUTCOME_SUCCESS, XDM_CONST.OUTCOME_FAILED),
     xdm.network.ip_protocol = if(protocol = "TCP", XDM_CONST.IP_PROTOCOL_TCP, XDM_CONST.IP_PROTOCOL_UDP),
     xdm.observer.name = device_name;
 ```
@@ -181,7 +181,7 @@ xdm.target.sent_bytes
 
 xdm.event.id
 xdm.event.type
-xdm.event.outcome (XDM_CONST.OUTCOME_SUCCESS / OUTCOME_FAILURE / OUTCOME_PARTIAL / OUTCOME_UNKNOWN)
+xdm.event.outcome (XDM_CONST.OUTCOME_SUCCESS / OUTCOME_FAILED / OUTCOME_PARTIAL / OUTCOME_UNKNOWN)
 xdm.event.outcome_reason
 xdm.event.description
 xdm.event.original_event_type
@@ -207,11 +207,13 @@ xdm.observer.version
 ### XDM Constants
 Use `XDM_CONST.*` for enum-type fields to ensure consistency:
 ```
-XDM_CONST.OUTCOME_SUCCESS, XDM_CONST.OUTCOME_FAILURE
+XDM_CONST.OUTCOME_SUCCESS, XDM_CONST.OUTCOME_FAILED, XDM_CONST.OUTCOME_PARTIAL, XDM_CONST.OUTCOME_UNKNOWN
 XDM_CONST.IP_PROTOCOL_TCP, XDM_CONST.IP_PROTOCOL_UDP
 XDM_CONST.HTTP_METHOD_GET, XDM_CONST.HTTP_METHOD_POST
 XDM_CONST.EVENT_TYPE_NETWORK, XDM_CONST.EVENT_TYPE_PROCESS
 ```
+
+**Constant-name gotcha.** The failed-outcome constant is `OUTCOME_FAILED` (past tense), not `OUTCOME_FAILURE`. Using a wrong XDM_CONST symbol name produces a generic "internal error" on DM rule save with no field-level diagnostic, because the validator resolves `XDM_CONST.*` lazily after parsing the if-tree. Always cross-check constant names against the official enum at https://docs-cortex.paloaltonetworks.com/r/Cortex-XSIAM/Data-Model-Schema-Guide-for-Cortex-XSIAM/XDM_CONST.OUTCOME before authoring.
 
 ## Custom Datasets
 
