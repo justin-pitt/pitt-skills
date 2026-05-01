@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code working in this repo. The workspace-le
 
 ## What this is
 
-A Claude Code marketplace and Copilot Chat instructions distributor. Skills live under `plugins/pitt-skills/skills/`. `scripts/build.ps1` generates Copilot artifacts under `.github/instructions/`, `.github/prompts/`, and `.github/agents/` from each skill's `SKILL.md`. `scripts/install.ps1` and `scripts/install.sh` symlink those artifacts into `~/.copilot/`, merge a snippet into `~/.claude/settings.json`, and auto-detect which CLIs are on PATH.
+A Claude Code marketplace and Copilot Chat instructions distributor. Skills live under `plugins/pitt-skills/skills/`. `scripts/build.ps1` generates Copilot artifacts under `.github/instructions/`, `.github/prompts/`, and `.github/agents/` from each skill's `SKILL.md`. `scripts/install.ps1` and `scripts/install.sh` symlink those artifacts into `~/.copilot/`, mount the plugin's skills under `<HERMES_HOME>/skills/pitt-skills/` for Hermes (auto-discovers nested SKILL.md), merge a snippet into `~/.claude/settings.json`, and auto-detect which CLIs are on PATH (`claude`, `copilot`, `code`, `hermes`).
 
 ## Local environment quirks
 

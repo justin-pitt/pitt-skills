@@ -16,6 +16,7 @@ Append one of these depending on your tool:
 - **Copilot CLI:** "When done, run `/skills reload` and confirm pitt-skills entries appear."
 - **VS Code Copilot Chat:** "When done, remind me to reload the VS Code window (Ctrl+Shift+P → Developer: Reload Window)."
 - **Copilot Desktop App:** "When done, remind me to fully quit and reopen the Copilot desktop app."
+- **Hermes:** "When done, remind me that the new skills are auto-discovered under `pitt-skills/<skill>` on the next message — no restart needed."
 
 ## Manual install
 
