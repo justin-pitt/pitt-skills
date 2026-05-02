@@ -147,6 +147,72 @@ Describe "Test-ToolInstalled" {
     }
 }
 
+Describe "Hermes integration" {
+    BeforeEach {
+        $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"
+        $script:OrigHome = $env:HOME
+        $script:OrigUserProfile = $env:USERPROFILE
+        $script:OrigHermesHome = $env:HERMES_HOME
+        $env:USERPROFILE = $script:TempHome.FullName
+        $env:HOME = $script:TempHome.FullName
+        $env:HERMES_HOME = Join-Path $script:TempHome.FullName '.hermes'
+    }
+    AfterEach {
+        $env:HOME = $script:OrigHome
+        $env:USERPROFILE = $script:OrigUserProfile
+        $env:HERMES_HOME = $script:OrigHermesHome
+        Remove-Item $script:TempHome -Recurse -Force
+    }
+
+    It "Get-HermesHome honors HERMES_HOME" {
+        Get-HermesHome | Should -Be $env:HERMES_HOME
+    }
+
+    It "Get-HermesHome falls back to <home>/.hermes when HERMES_HOME is unset" {
+        $env:HERMES_HOME = $null
+        Get-HermesHome | Should -Be (Join-Path $script:TempHome.FullName '.hermes')
+    }
+
+    It "Install-HermesSymlinks creates <HERMES_HOME>/skills/pitt-skills -> repo skills" {
+        Install-HermesSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $env:HERMES_HOME 'skills/pitt-skills'
+        Test-Path $link | Should -BeTrue
+        (Get-Item $link).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills'
+    }
+
+    It "Install-HermesSymlinks refuses to overwrite a non-symlink at the link path" {
+        $linkParent = Join-Path $env:HERMES_HOME 'skills'
+        New-Item -ItemType Directory -Path $linkParent -Force | Out-Null
+        $link = Join-Path $linkParent 'pitt-skills'
+        New-Item -ItemType Directory -Path $link | Out-Null
+        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+
+        { Install-HermesSymlinks -RepoRoot $script:RepoRoot } | Should -Throw -ExpectedMessage "*Refusing to overwrite*"
+        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+    }
+
+    It "Remove-HermesSymlinks removes the symlink and is idempotent" {
+        Install-HermesSymlinks -RepoRoot $script:RepoRoot
+        $link = Join-Path $env:HERMES_HOME 'skills/pitt-skills'
+        Test-Path $link | Should -BeTrue
+        Remove-HermesSymlinks -RepoRoot $script:RepoRoot
+        Test-Path $link | Should -BeFalse
+        # Idempotent
+        { Remove-HermesSymlinks -RepoRoot $script:RepoRoot } | Should -Not -Throw
+    }
+
+    It "Remove-HermesSymlinks refuses to delete a real directory at the link path" {
+        $linkParent = Join-Path $env:HERMES_HOME 'skills'
+        New-Item -ItemType Directory -Path $linkParent -Force | Out-Null
+        $link = Join-Path $linkParent 'pitt-skills'
+        New-Item -ItemType Directory -Path $link | Out-Null
+        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+
+        { Remove-HermesSymlinks -RepoRoot $script:RepoRoot -WarningAction SilentlyContinue } | Should -Not -Throw
+        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+    }
+}
+
 Describe "Remove-ClaudeSettings" {
     BeforeEach {
         $script:TempHome = New-Item -ItemType Directory -Path "$env:TEMP/pitt-skills-test-$(New-Guid)"

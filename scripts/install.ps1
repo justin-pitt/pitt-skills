@@ -1,7 +1,7 @@
 [CmdletBinding()]
 # -DotSource, -RemoveShadowing, -Tools, and -Uninstall are wired up.
-# -Tools defaults to all three integrations (claude, copilotCli, vscode); pass -Tools explicitly to limit.
-# When -Tools is not passed, the script auto-detects which CLIs are installed (claude / copilot / code)
+# -Tools defaults to all four integrations (claude, copilotCli, vscode, hermes); pass -Tools explicitly to limit.
+# When -Tools is not passed, the script auto-detects which CLIs are installed (claude / copilot / code / hermes)
 # and only wires those up. The same auto-detection gates -Uninstall.
 # -WhatIf is reserved for a future milestone and currently no-op.
 param(
@@ -9,8 +9,14 @@ param(
     [switch]$WhatIf,
     [switch]$Uninstall,
     [switch]$RemoveShadowing,
-    [string[]]$Tools = @('claude', 'copilotCli', 'vscode')
+    [string[]]$Tools = @('claude', 'copilotCli', 'vscode', 'hermes')
 )
+
+function Get-HermesHome {
+    if ($env:HERMES_HOME) { return $env:HERMES_HOME }
+    $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+    return Join-Path $userHome '.hermes'
+}
 
 function Get-ClaudeHome {
     if ($env:CLAUDE_HOME) { return $env:CLAUDE_HOME }
@@ -283,6 +289,24 @@ function Remove-CopilotChatSymlinks {
     Write-Host "Copilot Chat: ~/.copilot/instructions $($r1.Status); ~/.copilot/prompts $($r2.Status)"
 }
 
+function Install-HermesSymlinks {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    # Hermes auto-discovers SKILL.md files recursively under <HERMES_HOME>/skills/.
+    # Mounting the plugin's skills dir as <HERMES_HOME>/skills/pitt-skills gives
+    # users a `pitt-skills/<name>` namespace that won't collide with their own skills.
+    New-DirectorySymlink `
+        -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills') `
+        -Target (Join-Path $RepoRoot 'plugins/pitt-skills/skills')
+}
+
+function Remove-HermesSymlinks {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    $result = Remove-DirectorySymlink -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills')
+    Write-Host "Hermes: $($result.Path) $($result.Status)"
+}
+
 function Test-ToolInstalled {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $Name)
@@ -313,6 +337,7 @@ if (-not $DotSource) {
     if (Test-ToolInstalled 'claude')  { $detected += 'claude' }
     if (Test-ToolInstalled 'copilot') { $detected += 'copilotCli' }
     if (Test-ToolInstalled 'code')    { $detected += 'vscode' }
+    if (Test-ToolInstalled 'hermes')  { $detected += 'hermes' }
     # Auto-detect only if the caller did not explicitly pass -Tools. The param has a
     # non-empty default, so checking $PSBoundParameters is the only way to distinguish
     # "user picked all three" from "user did not specify". Same gate applies to -Uninstall.
@@ -334,14 +359,16 @@ if (-not $DotSource) {
                 'claude'     { Remove-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
                 'copilotCli' { Remove-CopilotCliSymlinks -RepoRoot $repoRoot }
                 'vscode'     { Remove-CopilotChatSymlinks -RepoRoot $repoRoot }
-                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode" }
+                'hermes'     { Remove-HermesSymlinks -RepoRoot $repoRoot }
+                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode, hermes" }
             }
         } else {
             switch ($tool) {
                 'claude'     { Merge-ClaudeSettings -SnippetPath (Join-Path $repoRoot 'settings.snippet.json') }
                 'copilotCli' { Install-CopilotCliSymlinks -RepoRoot $repoRoot }
                 'vscode'     { Install-CopilotChatSymlinks -RepoRoot $repoRoot }
-                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode" }
+                'hermes'     { Install-HermesSymlinks -RepoRoot $repoRoot }
+                default      { Write-Warning "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode, hermes" }
             }
         }
     }

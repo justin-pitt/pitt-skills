@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # scripts/install.sh - symlink-based installer for macOS / Linux
-# Bash mirror of install.ps1. Wires up claude / copilotCli / vscode integrations.
+# Bash mirror of install.ps1. Wires up claude / copilotCli / vscode / hermes integrations.
 # --uninstall reverses the wiring (settings.json edits + symlink removal).
 # --what-if is reserved for a future milestone and is currently a no-op.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TOOLS="claude,copilotCli,vscode"
+TOOLS="claude,copilotCli,vscode,hermes"
 WHATIF=0
 UNINSTALL=0
 
@@ -114,6 +114,22 @@ uninstall_copilot_chat() {
     echo "Copilot Chat: ~/.copilot/{instructions,prompts} uninstalled"
 }
 
+install_hermes() {
+    # Hermes auto-discovers SKILL.md files recursively under ~/.hermes/skills/.
+    # Mounting the plugin's skills dir as ~/.hermes/skills/pitt-skills gives
+    # users a `pitt-skills/<name>` namespace that won't collide with any of
+    # their own skills. HERMES_HOME is honored for non-default installs.
+    local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
+    ensure_symlink "$hermes_home/skills/pitt-skills" "$REPO_ROOT/plugins/pitt-skills/skills"
+    echo "Hermes: $hermes_home/skills/pitt-skills -> repo"
+}
+
+uninstall_hermes() {
+    local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
+    remove_symlink "$hermes_home/skills/pitt-skills"
+    echo "Hermes: $hermes_home/skills/pitt-skills uninstalled"
+}
+
 IFS=',' read -ra TOOL_LIST <<< "$TOOLS"
 for tool in "${TOOL_LIST[@]}"; do
     case "$tool" in
@@ -134,7 +150,18 @@ for tool in "${TOOL_LIST[@]}"; do
         vscode)
             if [[ $UNINSTALL -eq 1 ]]; then uninstall_copilot_chat; else install_copilot_chat; fi
             ;;
-        *) echo "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode" >&2 ;;
+        hermes)
+            if [[ $UNINSTALL -eq 1 ]]; then
+                # Uninstall is symlink-only; run even if the hermes binary is gone
+                # so a user who removed hermes can still clean up the orphaned symlink.
+                uninstall_hermes
+            elif command -v hermes >/dev/null 2>&1; then
+                install_hermes
+            else
+                echo "hermes not installed, skipping" >&2
+            fi
+            ;;
+        *) echo "Unknown tool '$tool' - skipping. Valid: claude, copilotCli, vscode, hermes" >&2 ;;
     esac
 done
 
