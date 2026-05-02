@@ -3,11 +3,11 @@
 [![build](https://github.com/justin-pitt/pitt-skills/actions/workflows/build.yml/badge.svg)](https://github.com/justin-pitt/pitt-skills/actions/workflows/build.yml)
 [![release](https://img.shields.io/github/v/release/justin-pitt/pitt-skills)](https://github.com/justin-pitt/pitt-skills/releases/latest)
 
-Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace and as Copilot Chat instructions.
+Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace, as Copilot Chat instructions, and as a Hermes skill bundle.
 
 ## Quick install — paste into your AI assistant
 
-### Universal prompt (works in any of: Claude Code, Copilot CLI, Copilot Chat, Copilot Desktop)
+### Universal prompt (works in any of: Claude Code, Copilot CLI, Copilot Chat, Copilot Desktop, Hermes)
 
 > Clone `https://github.com/justin-pitt/pitt-skills` into `~/Code/pitt-skills` (or `%USERPROFILE%\Code\pitt-skills` on Windows). After cloning, run `./scripts/install.ps1` on Windows or `./scripts/install.sh` on macOS/Linux. Show me the installer's summary output, then tell me which tools were detected and wired up. If anything failed, propose a fix before retrying.
 
@@ -35,6 +35,7 @@ New installs always pull the latest. Existing installs need a refresh when a new
 
 - **Claude Code**: `/plugin marketplace update pitt-skills`, then restart any open sessions. Without this, Claude Code keeps reading from the cache directory that was populated at first install (`~/.claude/plugins/cache/pitt-skills/pitt-skills/<version>/`) and never sees the new content.
 - **Copilot CLI**: `git -C ~/Code/pitt-skills pull`. The `~/.copilot/instructions/` symlink points at the cloned working copy, so a checkout refresh is all that's needed.
+- **Hermes**: `git -C ~/Code/pitt-skills pull`. Same as Copilot CLI — the `<HERMES_HOME>/skills/pitt-skills` symlink points at the cloned working copy. Hermes auto-discovers on the next message, no restart needed.
 
 ## VS Code Chat — manual fallback (no symlinks)
 
