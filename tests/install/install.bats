@@ -181,3 +181,22 @@ JSON
     [ ! -e "$HOME/.claude/settings.json" ]
 }
 
+@test "install.sh --uninstall --tools hermes removes symlink even when hermes binary is absent" {
+    export HERMES_HOME="$TEST_HOME/.hermes"
+    # Install with hermes stubbed.
+    cat > "$TEST_HOME/bin/hermes" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+    chmod +x "$TEST_HOME/bin/hermes"
+    "$REPO_ROOT/scripts/install.sh" --tools hermes
+    [ -L "$HERMES_HOME/skills/pitt-skills" ]
+
+    # Simulate the user uninstalling hermes from their system after pitt-skills was wired up.
+    rm "$TEST_HOME/bin/hermes"
+
+    # Uninstall must still clean up the symlink — it does not need the binary.
+    "$REPO_ROOT/scripts/install.sh" --uninstall --tools hermes
+    [ ! -L "$HERMES_HOME/skills/pitt-skills" ]
+}
+

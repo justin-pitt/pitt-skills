@@ -151,8 +151,12 @@ for tool in "${TOOL_LIST[@]}"; do
             if [[ $UNINSTALL -eq 1 ]]; then uninstall_copilot_chat; else install_copilot_chat; fi
             ;;
         hermes)
-            if command -v hermes >/dev/null 2>&1; then
-                if [[ $UNINSTALL -eq 1 ]]; then uninstall_hermes; else install_hermes; fi
+            if [[ $UNINSTALL -eq 1 ]]; then
+                # Uninstall is symlink-only; run even if the hermes binary is gone
+                # so a user who removed hermes can still clean up the orphaned symlink.
+                uninstall_hermes
+            elif command -v hermes >/dev/null 2>&1; then
+                install_hermes
             else
                 echo "hermes not installed, skipping" >&2
             fi
