@@ -101,9 +101,10 @@ STUB
 }
 
 @test "install.sh skips hermes when binary is missing" {
-    # Note: PATH was reset in setup() to include only TEST_HOME/bin and ORIG_PATH;
-    # hermes may be present on the host. Strip everything but our stub dir.
-    export PATH="$TEST_HOME/bin"
+    # No hermes stub in $TEST_HOME/bin. Curate PATH to system utility dirs so
+    # install.sh's preamble (dirname, etc.) still works, but exclude any host
+    # location that might have a real hermes installed.
+    export PATH="$TEST_HOME/bin:/usr/bin:/bin"
     export HERMES_HOME="$TEST_HOME/.hermes"
     run "$REPO_ROOT/scripts/install.sh" --tools hermes
     [ "$status" -eq 0 ]
