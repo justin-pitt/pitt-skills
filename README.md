@@ -5,6 +5,34 @@
 
 Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace, as Copilot Chat instructions, and as a Hermes skill bundle.
 
+> **Already running Claude Code in a project folder?** Skip to [Quick install](#quick-install--paste-into-your-ai-assistant). Otherwise, see [First time using Claude Code? Start here](#first-time-using-claude-code-start-here) below.
+
+## First time using Claude Code? Start here
+
+If you've never used a coding AI assistant before, do these five steps in order. None of them need git, Python, or PowerShell — just Claude Code itself.
+
+1. **Install Node.js** from [nodejs.org](https://nodejs.org/). Pick the LTS version, run the installer, accept the defaults.
+   *Don't have an Anthropic API key but have access to GitHub Copilot through work? See [claude-code-over-github-copilot](https://github.com/justin-pitt/claude-code-over-github-copilot) first — it lets you run Claude Code through your Copilot subscription.*
+2. **Install Claude Code.** Open a terminal (Command Prompt or PowerShell on Windows; Terminal on Mac/Linux) and run:
+   ```
+   npm install -g @anthropic-ai/claude-code
+   ```
+3. **Make a project folder anywhere on your machine, then `cd` into it.** Claude Code is per-folder — it remembers context for whichever folder you start it in. A throwaway folder for trying things out is fine:
+   ```
+   mkdir ~/Code/pitt-skills-host
+   cd ~/Code/pitt-skills-host
+   ```
+   On Windows in Command Prompt, use `mkdir %USERPROFILE%\Code\pitt-skills-host` then `cd /d %USERPROFILE%\Code\pitt-skills-host`.
+4. **Start Claude Code** by running `claude` from inside that folder. You'll see the chat prompt.
+5. **In the Claude Code chat, type these two slash commands one at a time:**
+   ```
+   /plugin marketplace add justin-pitt/pitt-skills
+   /plugin install pitt-skills@pitt-skills
+   ```
+   Then `/exit` and start `claude` again. Skills are now available in any folder you start Claude Code in.
+
+**Want Copilot CLI, VS Code Copilot Chat, or Hermes wired up too?** Once Claude Code is working, paste the [universal install prompt](#universal-prompt-works-in-any-of-claude-code-copilot-cli-copilot-chat-copilot-desktop-hermes) below into the chat — Claude Code will install any extra prerequisites (git, PowerShell 7, etc.) and wire those tools up too.
+
 ## Quick install — paste into your AI assistant
 
 ### Universal prompt (works in any of: Claude Code, Copilot CLI, Copilot Chat, Copilot Desktop, Hermes)
