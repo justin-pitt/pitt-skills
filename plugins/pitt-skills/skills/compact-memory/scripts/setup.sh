@@ -37,9 +37,14 @@ if ! command -v jq >/dev/null 2>&1; then
 else
     if [ -f "$SETTINGS" ]; then
         cp "$SETTINGS" "$SETTINGS.bak"
+        if ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
+            echo "[2/3] ERROR: $SETTINGS is not valid JSON. Backup saved at $SETTINGS.bak." >&2
+            echo "       Fix the JSON manually and re-run, or restore from the backup." >&2
+            exit 1
+        fi
         EXISTS=$(jq -r --arg path "$HOOK_COMMAND" '
             [(.hooks.PreCompact // [])[] | (.hooks // [])[] | select(.command == $path)] | length
-        ' "$SETTINGS" 2>/dev/null || echo 0)
+        ' "$SETTINGS")
         if [ "$EXISTS" -eq 0 ]; then
             jq --arg path "$HOOK_COMMAND" '
                 .hooks = (.hooks // {})
@@ -61,42 +66,44 @@ fi
 PROJECTS_DIR="$CLAUDE_HOME_DIR/projects"
 ADDED=0
 SKIPPED=0
-if [ -d "$PROJECTS_DIR" ]; then
-    for memory_md in "$PROJECTS_DIR"/*/memory/MEMORY.md; do
-        [ -f "$memory_md" ] || continue
-        if grep -q '_session-snapshot\.md' "$memory_md"; then
-            SKIPPED=$((SKIPPED+1))
-            continue
-        fi
-        if ! grep -q '^# Memory Index' "$memory_md"; then
-            SKIPPED=$((SKIPPED+1))
-            continue
-        fi
-        # Find python (same probe pattern as the hook itself)
-        PY=""
-        for candidate in python python3; do
-            if command -v "$candidate" >/dev/null 2>&1 && \
-               echo '' | "$candidate" -c "import sys" >/dev/null 2>&1; then
-                PY="$candidate"
-                break
+
+# Find python (same probe pattern as the hook itself).
+PY=""
+for candidate in python python3; do
+    if command -v "$candidate" >/dev/null 2>&1 && \
+       echo '' | "$candidate" -c "import sys" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+
+if [ -z "$PY" ]; then
+    echo "[3/3] WARN: no working python found, skipping MEMORY.md updates" >&2
+else
+    if [ -d "$PROJECTS_DIR" ]; then
+        for memory_md in "$PROJECTS_DIR"/*/memory/MEMORY.md; do
+            [ -f "$memory_md" ] || continue
+            if grep -q '_session-snapshot\.md' "$memory_md"; then
+                SKIPPED=$((SKIPPED+1))
+                continue
             fi
-        done
-        if [ -z "$PY" ]; then
-            echo "[3/3] WARN: no working python found, skipping MEMORY.md updates" >&2
-            break
-        fi
-        "$PY" -c '
+            if ! grep -q '^# Memory Index' "$memory_md"; then
+                SKIPPED=$((SKIPPED+1))
+                continue
+            fi
+            "$PY" -c '
 import sys, re
 path, line = sys.argv[1], sys.argv[2]
 with open(path, "r", encoding="utf-8") as f:
     content = f.read()
-new = re.sub(r"^(# Memory Index *\n+)", r"\1" + line + "\n", content, count=1, flags=re.MULTILINE)
+new = re.sub(r"^(# Memory Index *\r?\n+)", r"\1" + line + "\n", content, count=1, flags=re.MULTILINE)
 with open(path, "w", encoding="utf-8") as f:
     f.write(new)
 ' "$memory_md" "$INDEX_LINE"
-        ADDED=$((ADDED+1))
-    done
+            ADDED=$((ADDED+1))
+        done
+    fi
+    echo "[3/3] MEMORY.md updates: added=$ADDED, skipped=$SKIPPED (already-present or no '# Memory Index' heading)"
 fi
-echo "[3/3] MEMORY.md updates: added=$ADDED, skipped=$SKIPPED (already-present or no '# Memory Index' heading)"
 
 echo "Done. Run /compact in a long session to verify."
