@@ -25,40 +25,70 @@ The snapshot is referenced from `MEMORY.md` so the harness eagerly indexes it; f
 
 ## Setup
 
-Three steps:
+You can install this in three ways. They all produce the same result.
 
-### 1. Copy the hook script into your `~/.claude/hooks/`
+### Option 1 — Automated (recommended)
+
+Run the bundled setup script. It copies the hook, merges the `PreCompact` entry into `~/.claude/settings.json`, and adds the `_session-snapshot.md` index entry to every existing `~/.claude/projects/*/memory/MEMORY.md`. Idempotent.
+
+POSIX shells (Linux/macOS/Git Bash):
+```bash
+bash <skill-dir>/scripts/setup.sh
+```
+
+PowerShell 7+:
+```powershell
+& "<skill-dir>/scripts/setup.ps1"
+```
+
+Honors `$CLAUDE_HOME` (or `$env:CLAUDE_HOME` on PS) if set, else uses `~/.claude`. Requires `jq` on the bash path; the PowerShell version uses native JSON cmdlets and has no extra deps. Backs up `settings.json` to `settings.json.bak` before editing.
+
+### Option 2 — AI-assisted
+
+Tell your Claude Code agent (or any LLM agent with file-edit tools): **"Set up the compact-memory skill following the steps in `<skill-dir>/SKILL.md`."** The agent reads this file and applies the three edits below using its file-write tools — no `jq` or shell required. This is the easiest path if you'd rather not run an unfamiliar script and you trust the agent.
+
+### Option 3 — By hand
+
+Three edits. Each is small.
+
+**Edit 1.** Copy the hook script to `~/.claude/hooks/pre-compact.sh` and make it executable.
 
 ```bash
 mkdir -p ~/.claude/hooks
-cp <this-skill-dir>/scripts/pre-compact.sh ~/.claude/hooks/pre-compact.sh
+cp <skill-dir>/scripts/pre-compact.sh ~/.claude/hooks/pre-compact.sh
 chmod +x ~/.claude/hooks/pre-compact.sh
 ```
 
-On Windows, the destination is `%USERPROFILE%\.claude\hooks\pre-compact.sh` (Git Bash path: `$USERPROFILE/.claude/hooks/pre-compact.sh`).
+(On Windows-native paths, the destination is `%USERPROFILE%\.claude\hooks\pre-compact.sh`.)
 
-### 2. Add the `PreCompact` hook to your `~/.claude/settings.json`
-
-Inside the top-level `"hooks"` object, add:
+**Edit 2.** Add a `PreCompact` block under the top-level `"hooks"` key in `~/.claude/settings.json`. If `"hooks"` doesn't exist yet, create it.
 
 ```json
-"PreCompact": [
-  {
-    "hooks": [
+{
+  "hooks": {
+    "PreCompact": [
       {
-        "type": "command",
-        "command": "~/.claude/hooks/pre-compact.sh"
+        "hooks": [
+          { "type": "command", "command": "~/.claude/hooks/pre-compact.sh" }
+        ]
       }
     ]
   }
-]
+}
 ```
 
-If `"hooks"` doesn't exist, add it as a top-level key. Validate with `jq . ~/.claude/settings.json` after editing.
+If you already have other entries under `"hooks"`, only add the `PreCompact` array — leave existing entries alone. Validate with `jq . ~/.claude/settings.json` before saving.
 
-### 3. Add an index entry to your auto-memory `MEMORY.md`
+**Edit 3.** For each project workspace where you want compaction snapshots, add an index entry to that workspace's auto-memory `MEMORY.md`.
 
-Find your project memory dir at `~/.claude/projects/<encoded-workspace-path>/memory/MEMORY.md` (the encoded path looks like `c--Code` for `c:\Code`). Add this line as the first bullet under `# Memory Index`:
+The path is `~/.claude/projects/<encoded-workspace-path>/memory/MEMORY.md`. The encoding rule: drop the drive letter prefix, replace `:` and `/` and `\` with `-`, preserve case. Examples:
+
+| Workspace | Encoded path |
+|---|---|
+| `c:\Code` | `c--Code` |
+| `/home/justin/code` | `-home-justin-code` |
+
+Add this line as the first bullet under the `# Memory Index` heading:
 
 ```markdown
 - [_session-snapshot.md](_session-snapshot.md) — Pre-compaction snapshot, check mtime for recency
@@ -66,14 +96,14 @@ Find your project memory dir at `~/.claude/projects/<encoded-workspace-path>/mem
 
 ### Test it
 
-Run `/compact` in a long session. Then check:
+After any of the three options, run `/compact` in a long Claude Code session. Then check:
 
 ```bash
 ls ~/.claude/projects/<encoded>/memory/_session-snapshot.md
 cat ~/.claude/projects/<encoded>/memory/_session-snapshot.md
 ```
 
-You should see the snapshot file (well under 100KB) with timestamp, summary, and raw transcript tail. On the next turn, ask Claude "Read _session-snapshot.md and tell me what we were just doing" — it should locate and read the snapshot via the MEMORY.md pointer.
+You should see the snapshot file (well under 100KB) with timestamp, summary, and raw transcript tail. On the next turn, ask Claude "Read _session-snapshot.md and tell me what we were just doing" — it should locate the file via the MEMORY.md pointer and produce a recovery summary.
 
 ## If you previously had a broken setup
 
