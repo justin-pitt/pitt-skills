@@ -2,13 +2,15 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a "First time using Claude Code? Start here" onboarding section to README.md so a non-technical newcomer can install Claude Code, make a project folder, and paste the universal install prompt without guessing at prerequisites.
+**Goal:** Add a "First time using Claude Code? Start here" onboarding section to README.md so a non-technical newcomer (e.g. someone who's never used a coding AI assistant before, doesn't know git/Python/PowerShell) can go from "I just heard about this repo" to "skills are wired up in Claude Code" without hitting prerequisite walls.
 
 **Architecture:** Pure docs. One new H2 section inserted near the top of README.md (after the H1/tagline/badges, before "Quick install — paste into your AI assistant"). One new "Already running Claude Code?" hint line right under the tagline so experienced users skip past.
 
+The new section uses Claude Code's built-in `/plugin marketplace add` flow — Claude Code does the fetch internally, so beginners need ZERO git, Python, or PowerShell. Once Claude Code is running, the existing "Quick install — paste into your AI assistant" section serves as the graduation path for users who later want Copilot CLI / VS Code Chat / Hermes wired up too — Claude Code itself handles those prereqs (installing git, running install scripts, etc.). Edge case: users stuck on corporate machines with only GitHub Copilot access (no Anthropic API key) get a parenthetical link to [claude-code-over-github-copilot](https://github.com/justin-pitt/claude-code-over-github-copilot) inside step 1.
+
 **Tech Stack:** Markdown only. No code, no scripts, no tests.
 
-**Reference design:** `docs/plans/2026-05-02-readme-first-time-section-design.md` (commit `8134db0`).
+**Reference design:** `docs/plans/2026-05-02-readme-first-time-section-design.md` (commit `8134db0`). Note: design doc was written before the brainstorm pivot to the `/plugin marketplace` flow — the doc still describes the universal-prompt approach, but THIS plan supersedes it.
 
 **Branch:** `docs/readme-first-time-section` (off main; design doc already committed there).
 
@@ -39,7 +41,7 @@ grep -n '^### Universal prompt' README.md
 
 Expected: a single match, line near 10. The exact heading text is `### Universal prompt (works in any of: Claude Code, Copilot CLI, Copilot Chat, Copilot Desktop, Hermes)`. If the heading differs, recompute the anchor slug per GitHub's rules (lowercase, hyphens for spaces, drop punctuation).
 
-**Step 2: Add the "skip to" hint right under the tagline**
+**Step 2: Add the "skip to" hint and the new section**
 
 Find this block in `README.md` (around lines 6–8):
 
@@ -49,35 +51,47 @@ Justin Pitt's personal collection of Claude Code and Copilot skills, distributed
 ## Quick install — paste into your AI assistant
 ```
 
-Insert ONE new line between them so the result reads:
+Insert the new content between them so the result reads:
 
-```markdown
+````markdown
 Justin Pitt's personal collection of Claude Code and Copilot skills, distributed as a Claude Code marketplace, as Copilot Chat instructions, and as a Hermes skill bundle.
 
 > **Already running Claude Code in a project folder?** Skip to [Quick install](#quick-install--paste-into-your-ai-assistant). Otherwise, see [First time using Claude Code? Start here](#first-time-using-claude-code-start-here) below.
 
 ## First time using Claude Code? Start here
 
-If you've never used a coding AI assistant before, do these four steps in order:
+If you've never used a coding AI assistant before, do these five steps in order. None of them need git, Python, or PowerShell — just Claude Code itself.
 
-1. **Install Claude Code** — see [Anthropic's install guide](https://docs.claude.com/en/docs/claude-code/setup). On Mac/Linux: `npm install -g @anthropic-ai/claude-code`. On Windows: same command in PowerShell after installing [Node.js](https://nodejs.org/).
-2. **Make a project folder anywhere on your machine.** Claude Code is per-folder — it remembers context for whichever folder you start it in. A first-time folder for trying things out is fine:
+1. **Install Node.js** from [nodejs.org](https://nodejs.org/). Pick the LTS version, run the installer, accept the defaults.
+   *Don't have an Anthropic API key but have access to GitHub Copilot through work? See [claude-code-over-github-copilot](https://github.com/justin-pitt/claude-code-over-github-copilot) first — it lets you run Claude Code through your Copilot subscription.*
+2. **Install Claude Code.** Open a terminal (Command Prompt or PowerShell on Windows; Terminal on Mac/Linux) and run:
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+3. **Make a project folder anywhere on your machine, then `cd` into it.** Claude Code is per-folder — it remembers context for whichever folder you start it in. A throwaway folder for trying things out is fine:
    ```bash
    mkdir ~/Code/pitt-skills-host
    cd ~/Code/pitt-skills-host
    ```
-3. **Start Claude Code** by running `claude` from inside that folder. You'll see the chat prompt.
-4. **Paste the [universal install prompt](#universal-prompt-works-in-any-of-claude-code-copilot-cli-copilot-chat-copilot-desktop-hermes) below into the chat.** Claude Code will clone this repo, run the installer, and tell you what got wired up. Restart Claude Code when it tells you to.
+   On Windows in Command Prompt, use `mkdir %USERPROFILE%\Code\pitt-skills-host` then `cd /d %USERPROFILE%\Code\pitt-skills-host`.
+4. **Start Claude Code** by running `claude` from inside that folder. You'll see the chat prompt.
+5. **In the Claude Code chat, type these two slash commands one at a time:**
+   ```
+   /plugin marketplace add justin-pitt/pitt-skills
+   /plugin install pitt-skills@pitt-skills
+   ```
+   Then `/exit` and start `claude` again. Skills are now available in any folder you start Claude Code in.
 
-That's it — your skills are now available in any folder you start Claude Code in.
+**Want Copilot CLI, VS Code Copilot Chat, or Hermes wired up too?** Once Claude Code is working, paste the [universal install prompt](#universal-prompt-works-in-any-of-claude-code-copilot-cli-copilot-chat-copilot-desktop-hermes) below into the chat — Claude Code will install any extra prerequisites (git, PowerShell 7, etc.) and wire those tools up too.
 
 ## Quick install — paste into your AI assistant
-```
+````
 
 Notes on the insertion:
-- The blockquote line is the experienced-user shortcut. Two anchor links: forward to "Quick install" (the existing H2) and forward to the new H2 below it. Both links use GitHub's auto-generated anchor slugs.
-- The new H2 is `## First time using Claude Code? Start here`. GitHub's auto-anchor for it: lowercase, drop the `?`, replace spaces with hyphens → `#first-time-using-claude-code-start-here`. (Note: GitHub drops a single trailing punctuation but keeps internal hyphens.)
-- The fenced bash block inside step 2 needs to be indented 3 spaces (so it nests inside the numbered list item) — Markdown's "lazy continuation" requires the fence to align with the list-item content.
+- The blockquote line right under the tagline is the experienced-user shortcut. Two anchor links: forward to "Quick install" (existing H2) and forward to the new H2 below it.
+- The new H2 is `## First time using Claude Code? Start here`. GitHub's auto-anchor: lowercase, drop the `?`, replace spaces with hyphens → `#first-time-using-claude-code-start-here`.
+- Fenced code blocks INSIDE the numbered list items need 3-space indentation (matches `1. ` prefix + 2 spaces of body indent) so Markdown nests them correctly under their list items.
+- Outer fence in this plan is **four backticks** (` ```` `) so the inner three-backtick fence renders cleanly inside this code block. The README itself uses three-backtick fences as normal.
 
 **Step 3: Verify anchor links resolve**
 
