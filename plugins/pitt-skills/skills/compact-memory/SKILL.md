@@ -79,6 +79,25 @@ You should see the snapshot file (well under 100KB) with timestamp, summary, and
 
 Older versions of this pattern paired a `PreCompact` hook with a `Stop` hook that deleted the backup on the next response (defeating the point). If you had that, remove the `post-compact-cleanup.sh` script and the corresponding `Stop` matcher from `settings.json` before installing this one.
 
+## Known pitfalls
+
+### Recursion: `claude -p` inherits hooks
+
+`claude -p` invoked from inside this hook spawns a **fresh Claude Code session in the same project directory**, which inherits all your hooks — including this one. If that subprocess hits context limits and triggers its own PreCompact, you get unbounded recursion: each layer overwrites the parent's snapshot and spawns more subprocess sessions. An early version of this script blew up to hundreds of megabytes of orphan transcripts in a single afternoon.
+
+The shipped script defends against this with four layered guards. **Do not remove them, even if they look paranoid:**
+
+1. **Size guard** — skip if the transcript is under 1 MB. A real long-running session is many megabytes by the time it compacts; a subprocess session is well under 1 MB at the moment its own PreCompact would fire.
+2. **Lockfile** — `_session-snapshot.lock` in the memory dir prevents concurrent runs. Stale locks (older than 5 minutes) are ignored so a crashed run can't permanently wedge things. Cleanup via `trap EXIT`.
+3. **`timeout 60s`** on the `claude -p` call — bounds runtime so a hung subprocess can't poison the parent.
+4. **Raw-tail snapshot written BEFORE `claude -p`** — even if the LLM call hangs, dies, or recurses, the on-disk snapshot is still useful (raw transcript tail + workspace metadata + transcript backup pointer). The script rewrites it with the LLM summary on success.
+
+If you fork this and want to swap `claude -p` for another summarizer (e.g., a local Python script with no recursion vector), you can drop guards 1–3 — but keep guard 4 (raw-tail-first) as a robustness measure.
+
+### Byte bounds, not line bounds
+
+Claude Code transcript JSONL lines can be multi-megabyte (full message bodies, tool listings). A line-based `tail -n 50` blows up the snapshot file size and the LLM input. The script uses byte-based caps (`tail -c $LLM_INPUT_BYTES`, `head -c $SUMMARY_MAX_BYTES`). Don't switch back to line-based slicing.
+
 ## Failure modes (all silent — never breaks compaction)
 
 - `claude -p` not on PATH or fails → snapshot has raw transcript only, summary section says "unavailable"
