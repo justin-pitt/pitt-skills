@@ -88,7 +88,7 @@ The path is `~/.claude/projects/<encoded-workspace-path>/memory/MEMORY.md`. The 
 | `c:\Code` | `c--Code` |
 | `/home/justin/code` | `-home-justin-code` |
 
-Add this line as the first bullet under the `# Memory Index` heading:
+Add this line at the top of the file (or as the first bullet under a `# Memory Index` heading if your `MEMORY.md` has one — the default Claude Code format is a flat bullet list with no heading):
 
 ```markdown
 - [_session-snapshot.md](_session-snapshot.md) — Pre-compaction snapshot, check mtime for recency

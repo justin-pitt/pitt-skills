@@ -63,8 +63,11 @@ else
 fi
 
 # --- 3. Add MEMORY.md index entry to existing workspace memory dirs ---
+# Default Claude Code MEMORY.md is a flat bullet list with no heading. If a
+# `# Memory Index` heading exists, insert under it; otherwise prepend at top.
 PROJECTS_DIR="$CLAUDE_HOME_DIR/projects"
-ADDED=0
+ADDED_HEADING=0
+ADDED_TOP=0
 SKIPPED=0
 
 # Find python (same probe pattern as the hook itself).
@@ -87,23 +90,28 @@ else
                 SKIPPED=$((SKIPPED+1))
                 continue
             fi
-            if ! grep -q '^# Memory Index' "$memory_md"; then
-                SKIPPED=$((SKIPPED+1))
-                continue
-            fi
-            "$PY" -c '
+            RESULT=$("$PY" -c '
 import sys, re
 path, line = sys.argv[1], sys.argv[2]
 with open(path, "r", encoding="utf-8") as f:
     content = f.read()
-new = re.sub(r"^(# Memory Index *\r?\n+)", r"\1" + line + "\n", content, count=1, flags=re.MULTILINE)
+nl = "\r\n" if "\r\n" in content else "\n"
+if re.search(r"(?m)^# Memory Index", content):
+    new = re.sub(r"(?m)^(# Memory Index *\r?\n+)", r"\1" + line + nl, content, count=1)
+    print("heading")
+else:
+    new = line + nl + content
+    print("top")
 with open(path, "w", encoding="utf-8") as f:
     f.write(new)
-' "$memory_md" "$INDEX_LINE"
-            ADDED=$((ADDED+1))
+' "$memory_md" "$INDEX_LINE")
+            case "$RESULT" in
+                heading) ADDED_HEADING=$((ADDED_HEADING+1)) ;;
+                top)     ADDED_TOP=$((ADDED_TOP+1)) ;;
+            esac
         done
     fi
-    echo "[3/3] MEMORY.md updates: added=$ADDED, skipped=$SKIPPED (already-present or no '# Memory Index' heading)"
+    echo "[3/3] MEMORY.md updates: $ADDED_HEADING under heading, $ADDED_TOP at top, $SKIPPED already-present"
 fi
 
 echo "Done. Run /compact in a long session to verify."

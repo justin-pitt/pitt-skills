@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-05-04
+
+`compact-memory` setup scripts now handle the default Claude Code `MEMORY.md` format.
+
+### Fixed
+- `compact-memory/scripts/setup.ps1` and `setup.sh` previously skipped any `MEMORY.md` lacking a `# Memory Index` heading, then logged the result as `skipped (already-present or no heading)` — making it impossible to tell whether the index entry got installed. Default Claude Code auto-memory `MEMORY.md` files are flat bullet lists with no heading, so on a vanilla install step 3 was a silent no-op.
+- New behavior: insert under the heading when present, otherwise prepend the bullet at the top of the file. Log differentiates the three outcomes (`under heading`, `at top`, `already-present`).
+- `compact-memory/SKILL.md` "Edit 3" updated to drop the heading-required wording.
+
+### Changed
+- `plugin.json` version bumped 1.8.0 → 1.8.1.
+
 ## [Unreleased] — v1.3.0
 
 Retire `threatconnect-polarity` ahead of a more robust replacement skill.
