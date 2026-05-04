@@ -75,7 +75,13 @@ if [ -f "$LOCK_FILE" ]; then
         exit 0
     fi
 fi
-echo "$$" > "$LOCK_FILE"
+# Recursion guard 2 (continued): atomic lockfile create. `set -C` (noclobber)
+# fails the redirect if the file exists, so two concurrent invocations can't
+# both pass the existence check and clobber each other.
+if ! ( set -C; echo "$$" > "$LOCK_FILE" ) 2>/dev/null; then
+    # Lost the race — another instance just created the lock.
+    exit 0
+fi
 trap 'rm -f "$LOCK_FILE"' EXIT
 
 TS=$(date -u +"%Y%m%d-%H%M%S")
@@ -138,7 +144,10 @@ fi
 
 SUMMARY=""
 if command -v claude >/dev/null 2>&1 && [ -n "$TIMEOUT_BIN" ]; then
-    PROMPT='You are summarizing the recent tail of a Claude Code transcript that just hit context limits. The text below may start mid-JSON-line — that is expected. Future-you needs to recover what was in flight. Write a concise markdown brief covering: (1) decisions made with rationale, (2) files touched and branches in flight, (3) open questions or pending choices, (4) current task and what is blocked or next, (5) anything an unfamiliar reader would need to NOT redo work. Aim for 200-500 words. Skip pleasantries.'
+    PROMPT=$(cat <<'EOF'
+You are summarizing the recent tail of a Claude Code transcript that just hit context limits. The text below may start mid-JSON-line — that is expected. Future-you needs to recover what was in flight. Write a concise markdown brief covering: (1) decisions made with rationale, (2) files touched and branches in flight, (3) open questions or pending choices, (4) current task and what is blocked or next, (5) anything an unfamiliar reader would need to NOT redo work. Aim for 200-500 words. Skip pleasantries.
+EOF
+)
     SUMMARY=$(tail -c "$LLM_INPUT_BYTES" "$TRANSCRIPT" 2>/dev/null | "$TIMEOUT_BIN" 60 claude -p "$PROMPT" 2>/dev/null || true)
     SUMMARY=$(printf '%s' "$SUMMARY" | head -c "$SUMMARY_MAX_BYTES")
 fi
@@ -150,8 +159,12 @@ write_snapshot "$SUMMARY"
 # Archive a dated copy of the snapshot
 cp "$SNAPSHOT_FILE" "$ARCHIVE/snapshot-${TS}.md" 2>/dev/null || true
 
-# Rotate: keep last 10 snapshots, last 3 transcript backups
-ls -1t "$ARCHIVE"/snapshot-*.md 2>/dev/null | tail -n +11 | xargs -r -I {} rm -f {} 2>/dev/null
-ls -1t "$ARCHIVE"/transcript-*.jsonl 2>/dev/null | tail -n +4 | xargs -r -I {} rm -f {} 2>/dev/null
+# Rotate: keep last 10 snapshots, last 3 transcript backups.
+# Filenames encode YYYYMMDD-HHMMSS so lexical reverse-sort = newest-first.
+# Portable: avoids BSD/GNU split on `xargs -r` and `ls -1t`.
+find "$ARCHIVE" -maxdepth 1 -name 'snapshot-*.md' -type f 2>/dev/null \
+    | sort -r | tail -n +11 | while IFS= read -r f; do rm -f "$f"; done
+find "$ARCHIVE" -maxdepth 1 -name 'transcript-*.jsonl' -type f 2>/dev/null \
+    | sort -r | tail -n +4 | while IFS= read -r f; do rm -f "$f"; done
 
 exit 0
