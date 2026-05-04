@@ -63,7 +63,13 @@ mkdir -p "$MEMORY_DIR" "$ARCHIVE" 2>/dev/null || exit 0
 # Recursion guard 2: lockfile. If another instance is running, bail.
 # Treat locks older than 5 minutes as stale (process likely died).
 if [ -f "$LOCK_FILE" ]; then
-    LOCK_MTIME=$(stat -c%Y "$LOCK_FILE" 2>/dev/null || stat -f%m "$LOCK_FILE" 2>/dev/null || echo 0)
+    LOCK_MTIME=$(stat -c%Y "$LOCK_FILE" 2>/dev/null || stat -f%m "$LOCK_FILE" 2>/dev/null || echo "")
+    if [ -z "$LOCK_MTIME" ]; then
+        # Can't determine lock age (no working stat) — assume the lock is held and bail.
+        # This is the conservative path; on the next compaction stat may work or the
+        # lockfile will be 5+ min old and the holder will have died.
+        exit 0
+    fi
     LOCK_AGE=$(( $(date +%s) - LOCK_MTIME ))
     if [ "$LOCK_AGE" -lt 300 ]; then
         exit 0
@@ -118,19 +124,25 @@ EOF
 # still useful (raw tail + workspace metadata + transcript backup pointer).
 write_snapshot "*Summary pending — claude -p call in progress.*"
 
-# LLM summary — best effort, bounded input + bounded runtime.
-# Recursion guard 3: timeout 60s on the claude -p call.
+# Recursion guard 3: timeout-bounded LLM call. We require a working `timeout`
+# (or `gtimeout` on macOS+coreutils) — without it, a hung `claude -p` subprocess
+# could wedge the parent compaction until the lockfile goes stale. If neither
+# is available, skip the LLM summary entirely; the raw-tail snapshot (written
+# above) keeps the file useful.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_BIN="gtimeout"
+fi
+
 SUMMARY=""
-if command -v claude >/dev/null 2>&1; then
+if command -v claude >/dev/null 2>&1 && [ -n "$TIMEOUT_BIN" ]; then
     PROMPT='You are summarizing the recent tail of a Claude Code transcript that just hit context limits. The text below may start mid-JSON-line — that is expected. Future-you needs to recover what was in flight. Write a concise markdown brief covering: (1) decisions made with rationale, (2) files touched and branches in flight, (3) open questions or pending choices, (4) current task and what is blocked or next, (5) anything an unfamiliar reader would need to NOT redo work. Aim for 200-500 words. Skip pleasantries.'
-    if command -v timeout >/dev/null 2>&1; then
-        SUMMARY=$(tail -c "$LLM_INPUT_BYTES" "$TRANSCRIPT" 2>/dev/null | timeout 60 claude -p "$PROMPT" 2>/dev/null || true)
-    else
-        SUMMARY=$(tail -c "$LLM_INPUT_BYTES" "$TRANSCRIPT" 2>/dev/null | claude -p "$PROMPT" 2>/dev/null || true)
-    fi
+    SUMMARY=$(tail -c "$LLM_INPUT_BYTES" "$TRANSCRIPT" 2>/dev/null | "$TIMEOUT_BIN" 60 claude -p "$PROMPT" 2>/dev/null || true)
     SUMMARY=$(printf '%s' "$SUMMARY" | head -c "$SUMMARY_MAX_BYTES")
 fi
-[ -z "$SUMMARY" ] && SUMMARY="*Summary unavailable (claude -p failed, timed out, or not on PATH). See raw turns below.*"
+[ -z "$SUMMARY" ] && SUMMARY="*Summary unavailable (claude -p / timeout failed, timed out, or not on PATH). See raw turns below.*"
 
 # Rewrite snapshot with the real summary now that we have it.
 write_snapshot "$SUMMARY"

@@ -88,7 +88,7 @@ The shipped script defends against this with four layered guards. **Do not remov
 
 1. **Size guard** — skip if the transcript is under 1 MB. A real long-running session is many megabytes by the time it compacts; a subprocess session is well under 1 MB at the moment its own PreCompact would fire.
 2. **Lockfile** — `_session-snapshot.lock` in the memory dir prevents concurrent runs. Stale locks (older than 5 minutes) are ignored so a crashed run can't permanently wedge things. Cleanup via `trap EXIT`.
-3. **`timeout 60s`** on the `claude -p` call — bounds runtime so a hung subprocess can't poison the parent.
+3. **Timeout-bounded LLM call** — `timeout 60` (or `gtimeout` on macOS with Homebrew coreutils) wraps the `claude -p` call so a hung subprocess can't wedge the parent compaction. **If neither `timeout` nor `gtimeout` is on PATH (stock macOS), the LLM summary is skipped entirely** rather than risking an unbounded hang — the raw-tail snapshot (guard 4) still captures everything important.
 4. **Raw-tail snapshot written BEFORE `claude -p`** — even if the LLM call hangs, dies, or recurses, the on-disk snapshot is still useful (raw transcript tail + workspace metadata + transcript backup pointer). The script rewrites it with the LLM summary on success.
 
 If you fork this and want to swap `claude -p` for another summarizer (e.g., a local Python script with no recursion vector), you can drop guards 1–3 — but keep guard 4 (raw-tail-first) as a robustness measure.
