@@ -26,7 +26,7 @@ If you've never used a coding AI assistant before, do these five steps in order.
 4. **Start Claude Code** by running `claude` from inside that folder. You'll see the chat prompt.
 5. **In the Claude Code chat, type these two slash commands one at a time:**
    ```
-   /plugin marketplace add justin-pitt/pitt-skills
+   /plugin marketplace add https://github.com/justin-pitt/pitt-skills.git
    /plugin install pitt-skills@pitt-skills
    ```
    Then `/exit` and start `claude` again. Skills are now available in any folder you start Claude Code in.
@@ -64,6 +64,56 @@ New installs always pull the latest. Existing installs need a refresh when a new
 - **Claude Code**: `/plugin marketplace update pitt-skills`, then restart any open sessions. Without this, Claude Code keeps reading from the cache directory that was populated at first install (`~/.claude/plugins/cache/pitt-skills/pitt-skills/<version>/`) and never sees the new content.
 - **Copilot CLI**: `git -C ~/Code/pitt-skills pull`. The `~/.copilot/instructions/` symlink points at the cloned working copy, so a checkout refresh is all that's needed.
 - **Hermes**: `git -C ~/Code/pitt-skills pull`. Same as Copilot CLI — the `<HERMES_HOME>/skills/pitt-skills` symlink points at the cloned working copy. Hermes auto-discovers on the next message, no restart needed.
+
+## Troubleshooting
+
+### SSH host-key error during `/plugin marketplace add` or `/plugin install`
+
+If you see:
+```
+Failed to clone marketplace repository: SSH host key is not in your known_hosts file.
+No ED25519 host key is known for github.com and you have requested strict checking.
+```
+
+You're using an old shorthand that resolves to SSH. Two ways to fix:
+
+**Recommended — use the HTTPS URL form:**
+```
+/plugin marketplace add https://github.com/justin-pitt/pitt-skills.git
+```
+
+That's the form documented above and it skips SSH entirely.
+
+**Alternative — accept GitHub's SSH host key once:**
+```bash
+ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts
+```
+
+That writes GitHub's host keys non-interactively. Then retry the marketplace add. (Some users prefer this if they reuse SSH for other GitHub auth.)
+
+### I already added the marketplace via the old SSH shorthand — how do I switch to HTTPS?
+
+Edit `~/.claude/settings.json` directly. Find the `extraKnownMarketplaces.pitt-skills` entry and change its `source` block from the SSH form (often `{"source": "github", "repo": "justin-pitt/pitt-skills"}`) to:
+
+```json
+"pitt-skills": {
+  "source": { "source": "git", "url": "https://github.com/justin-pitt/pitt-skills.git" }
+}
+```
+
+Then refresh the marketplace catalog:
+```
+/plugin marketplace update pitt-skills
+```
+
+Your enabled plugins persist across the URL change — `enabledPlugins` is keyed by `<plugin>@<marketplace-name>`, not by the URL.
+
+### Other issues
+
+If a plugin's hook or setup script doesn't behave correctly, check:
+- The hook file is at `~/.claude/hooks/<name>.sh` and is executable (`chmod +x`)
+- `~/.claude/settings.json` has the corresponding `"hooks"` entry
+- Per-skill `setup.sh` / `setup.ps1` (where shipped) is the canonical install path — re-run it idempotently
 
 ## VS Code Chat — manual fallback (no symlinks)
 

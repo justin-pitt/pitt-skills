@@ -17,7 +17,7 @@ Describe "Merge-ClaudeSettings" {
     It "creates settings.json if absent, with snippet contents" {
         Merge-ClaudeSettings -SnippetPath "$script:RepoRoot/settings.snippet.json"
         $result = Get-Content "$($script:TempHome.FullName)/settings.json" -Raw | ConvertFrom-Json
-        $result.extraKnownMarketplaces.'pitt-skills'.source.repo | Should -Be "justin-pitt/pitt-skills"
+        $result.extraKnownMarketplaces.'pitt-skills'.source.url | Should -Be "https://github.com/justin-pitt/pitt-skills.git"
     }
 
     It "preserves existing keys when merging" {
@@ -27,7 +27,7 @@ Describe "Merge-ClaudeSettings" {
         $result = Get-Content "$($script:TempHome.FullName)/settings.json" -Raw | ConvertFrom-Json
         $result.theme | Should -Be "dark"
         $result.extraKnownMarketplaces.other.source.repo | Should -Be "x/y"
-        $result.extraKnownMarketplaces.'pitt-skills'.source.repo | Should -Be "justin-pitt/pitt-skills"
+        $result.extraKnownMarketplaces.'pitt-skills'.source.url | Should -Be "https://github.com/justin-pitt/pitt-skills.git"
     }
 
     It "writes a backup before modifying an existing file" {
