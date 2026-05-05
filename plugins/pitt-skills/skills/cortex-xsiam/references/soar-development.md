@@ -88,6 +88,37 @@ A conditional task's `conditions:` is a **list of labeled branches**, evaluated 
 
 **When debugging a condition task that fails on some alerts but works on others:** the issue is almost always a filter row whose data path doesn't resolve for that variant - not a missing branch. Inspect each row's accessors against the actual `Core.OriginalAlert` shape for the failing variant.
 
+### Sub-playbook fail-open patterns
+
+Sub-playbook tasks (`type: playbook`) need careful error-handling configuration when called from a parent — a hard internal failure with no output context can halt the parent even with `continueonerror: true` set. The reliable fail-open shape mirrors what task 2 (Threat Intel) and the standard CDW preamble use:
+
+```yaml
+"<task-id>":
+  type: playbook
+  task:
+    playbookId: <sub-id>
+  separatecontext: true
+  continueonerror: true
+  continueonerrortype: errorPath        # NOT "" — see below
+  nexttasks:
+    '#none#':
+    - "<next>"
+```
+
+**The gotcha:** `continueonerror: true` + `continueonerrortype: ""` (empty) flips the visual badge from red to yellow when a sub-playbook errors but does NOT prevent the parent from halting when the sub returns no output context. Only `continueonerrortype: errorPath` (with `#none#` defined and `#error#` omitted) produces real fail-open flow — the engine treats sub-playbook errors as non-terminal and continues through the `#none#` next-task. Yellow visual is not the same as "execution continued" — verify by inspecting downstream task progress.
+
+**When passing inputs into a sub-playbook with `separatecontext: true`,** the sub can't see the caller's `${issue}` / `${alert}` etc. via input defaults. Pass values explicitly via `scriptarguments`:
+
+```yaml
+scriptarguments:
+  identifier:
+    simple: ${issue.rawName}     # explicit, not relying on default
+```
+
+This matters for any default that references `${issue}` or `${alert}` — the sub's input default chain runs in the SUB's empty context, not the parent's, so the default resolves to empty. The CDW Dedup utility's default identifier (`substringFrom("at", issue.rawName) | trim`) is doubly broken: it relies on parent context AND the substringFrom("at") chain produces nonsense identifiers for alerts containing "at" in their static text (e.g., "Attachment"). Always override with an explicit identifier on the wrapper task.
+
+**Setting context that may not exist yet** — `setParentIncidentContext`, `setIncidentContext`, etc. fail with "Missing argument value" when their `value` arg is computed via a complex chain rooted on a maybe-null context path. Build the value chain rooted on a guaranteed-non-null new value (e.g., `inputs.identifier`) and append the existing list as the item, not the other way around. Or use `SetIfEmpty` to default the maybe-null root to `[]` before appending.
+
 ---
 
 ## Python Code Conventions
