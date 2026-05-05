@@ -1,7 +1,7 @@
 {
   "extraKnownMarketplaces": {
     "pitt-skills": {
-      "source": { "source": "github", "repo": "justin-pitt/pitt-skills" }
+      "source": { "source": "git", "url": "https://github.com/justin-pitt/pitt-skills.git" }
     },
     "superpowers-dev": {
       "source": { "source": "git", "url": "https://github.com/obra/superpowers.git" }
