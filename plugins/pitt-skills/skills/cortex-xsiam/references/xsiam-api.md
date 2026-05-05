@@ -318,6 +318,28 @@ Two endpoints, both with non-obvious request shapes - wire format is ZIP-wrapped
 
 **Auth headers** are the standard pair (`Authorization`, `X-XDR-AUTH-ID`) - no `Content-Type` on `insert` (multipart sets it). Server identifies the playbook by the `name` / `id` fields **inside the YAML**, not by the ZIP filename or the YAML filename inside the ZIP.
 
+**Filter quirk:** `playbooks/get` returns HTTP 400 on roughly 15-20% of `[CDW]`-prefixed names (no obvious pattern - `[CDW] Successful guest user invitation` works, `[CDW] XCloud Cryptomining` 400s). Same payload shape that succeeds for non-bracketed names. Workaround: try insert as-is and parse any colliding internal UUID out of the error response, then retry with the YAML's `id:` swapped to that UUID.
+
+### Playbook Execution Endpoints (internal, not public_api)
+
+These run *outside* the `/public_api/v1/` namespace but accept the same `Authorization` + `X-XDR-AUTH-ID` auth pair. They are the primitives the Marketplace `TroubleshootExecutePlaybookByAlertQuery` script POSTs to via `core-api-post`. **Not documented in Palo's REST API reference.** No public PAPI endpoint exists for "run playbook on existing alert" - this is the only path.
+
+| Endpoint | Purpose | Request body | Notes |
+|----------|---------|--------------|-------|
+| `POST /xsoar/inv-playbook/new` | Attach a playbook to one or more existing alerts (bulk) | `{"playbookId": "<id>", "alertIds": ["<id1>","<id2>"], "version": -1}` | **Max 10 alert IDs per call.** Replaces any playbook already running on those alerts. `playbookId` is the YAML `id:` field (UUID for system pack content, slug like `cdw-...` for custom-authored), NOT the display name. |
+| `POST /xsoar/inv-playbook/new/{playbook_id}/{alert_id}` | Single-alert variant (no body) | (none) | Same effect as the bulk call with one alert. |
+| `POST /investigation/:id/reopen` | Reopen a closed investigation before re-running a playbook | `{"id": "<alert_id>", "version": -1}` | The literal string `:id` in the path is correct (Express-style route placeholder XSIAM treats verbatim); the actual alert ID lives in the body. |
+
+**Use case:** backfilling newly-activated playbook triggers across pre-existing open issues. New issues fire the trigger automatically; existing issues need their playbook attached manually. Batching pattern: collect alert IDs by target playbook, call `inv-playbook/new` in groups of 10. Reopen first if the alert is closed.
+
+**Operational pattern for >100 alerts:** the endpoint slows under engine queue pressure (queue saturating from prior reruns). Set timeout to 180s, sleep 8s between batches, retry once on read-timeout treating it as likely-submitted. Maintain a checkpoint file (last successfully-submitted batch index) so a partial run resumes cleanly on re-invocation. The `cdw/_rerun_proofpoint_playbook.py` script is the working reference — handles 463 alerts in 47 batches.
+
+**Don't trust `playbook_runs` dataset for "did this rerun fire" verification.** The dataset has multi-minute ingestion lag and inconsistent freshness. The UI war room reflects new playbook executions within seconds; the dataset can stay empty for 5+ minutes after a confirmed-running rerun. Use the war room (or absence/presence of new `playbook_tasks` error rows for the alert's `entity_id`) as the truth source instead of comparing `playbook_runs.start_date` or `modified` timestamps.
+
+The `cortex-mcp` server exposes both as `run_playbook_on_alerts` and `reopen_alert_investigation` tools, gated behind `MCP_RESPONSE_ACTIONS_ENABLED=true` because they trigger full downstream playbook execution (notifications, response actions, ticket creation).
+
+Source: [TroubleshootExecutePlaybookByAlertQuery.py](https://github.com/demisto/content/blob/master/Packs/Troubleshoot/Scripts/TroubleshootExecutePlaybookByAlertQuery/TroubleshootExecutePlaybookByAlertQuery.py).
+
 ### Additional Endpoint Categories
 
 These categories exist in the API but are less commonly used programmatically:

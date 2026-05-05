@@ -73,11 +73,26 @@ Common scripts gain the `SLA` tag and read alert context to email, escalate, or 
 
 ## 5. Automation Rules
 
-**Legacy XDR feature, frozen in XSIAM** (admin doc p. 735-736). If migrated from XDR, existing rules at Incident Response → Response → Automation → Automation Rules still execute. You can disable or delete them; you **cannot edit existing rules or create new ones**.
+**Critical naming overlap.** XSIAM ships two different surfaces both labeled "Automation Rules" in different parts of the UI. They are unrelated mechanisms.
 
-For new automation in XSIAM, build **playbooks** (see [soar-automation.md](soar-automation.md)). Playbooks supersede automation rules, support full SOAR primitives (sub-playbooks, branching, indicator extraction, manual tasks), and are the only path forward for net-new tenants.
+| What it is | UI path | Status | What it does |
+|---|---|---|---|
+| **Legacy XDR Automation Rules** | Incident Response → Response → Automation → Automation Rules | Frozen in XSIAM (admin doc p. 735-736). Existing migrated rules still execute; you cannot edit or create new ones. | Legacy auto-actions on alerts (assign labels, severity, etc.). Supplanted by playbooks. |
+| **Playbook trigger / recommendation rules** (also labeled "Automation Rules" in the Issues page bulk-action menu and the Settings area) | Settings → Configurations → Automation, OR the rule editor surfaced when activating Palo's recommendation suggestions. Backed by the `PLAYBOOK_SUGGESTION_RULES_TABLE` API table. | **Active and editable.** | Match an issue on `alert_name`/`alert_source`/`alert_type`/`mitre_technique_id_and_name`/`tags` etc., fire one configured playbook on issue creation. The `IS_AUTO_ENABLED` flag controls whether new tenants get the rule on by default. |
 
-When auditing a migrated tenant, list legacy rules first - many are redundant with shipped playbooks and just add noise.
+If a user says "XSIAM automation rules" they almost always mean the second one (the modern playbook-trigger surface). Don't push back claiming the feature is frozen - it's not the same feature. Verify by asking which UI section they're in.
+
+The trigger UI's filter dropdown exposes issue-level fields: Name, Severity, Issue Domain, Detection Method, Category, Observation Time, Description, Status, Resolution Reason, Resolution Comment, Tags, Excluded, Starred, External Id. These don't map 1:1 to the API's `alert_*` field names from `ALERTS_FILTER`. Common translations: `alert_source` → `Detection Method` (values: `Correlation`, `XDR Analytics`, `XDR Analytics BIOC`, `XDR BIOC`, `Vulnerability Policy`, `ASM`, `CSPM Scanner`, `Custom Alert`, plus `IOC` on tenants where IOC source is enabled). `alert_name` → `Name`. `mitre_technique_id_and_name` → `Tags` (XSIAM stamps technique IDs into Tags) or `Description` fallback.
+
+**Issue.name auto-construction:** XSIAM builds `Name` from the constituent alert(s). Single-alert issues land as `'<alert_name>'` (single-quote wrapped); multi-alert grouped issues become `'<first alert_name>' along with N other issue`. Operators are limited to `=, !=, contains`. Filter design implication: design correlation `alert_name` templates with a unique fixed prefix (no `$var` substitution at the head) so a `Name contains "<prefix>"` filter survives both single- and multi-alert wrapping. Operator `=` rarely matches because of the wrapping.
+
+**Empty preview is normal.** The trigger UI's preview pane searches historical issues and returns 0 results until matching data exists. This does not block save — XSIAM accepts the trigger with no historical match and applies it forward to new issues.
+
+For programmatic activation/inspection of the modern trigger rules, the recommendation table is fetched via the webapp endpoint `/api/webapp/get_data?table_name=PLAYBOOK_SUGGESTION_RULES_TABLE` (session-cookie auth, not PAPI). Each record carries `RULE_ID`, `RULE_NAME`, `PLAYBOOK_ID`, `ALERTS_FILTER`, and `AUTOMATION_TYPE: playbook`.
+
+**Backfilling pre-existing open issues** (issues that exist but missed the trigger because the rule was off when they were created): see the playbook-execution endpoints in [xsiam-api.md](xsiam-api.md). The `/xsoar/inv-playbook/new` endpoint attaches a playbook to up to 10 alerts at a time. The Marketplace `TroubleshootExecutePlaybookByAlertQuery` script wraps this for query-based bulk runs.
+
+For net-new automation logic in XSIAM, build **playbooks** (see [soar-automation.md](soar-automation.md)). Playbooks support full SOAR primitives (sub-playbooks, branching, indicator extraction, manual tasks).
 
 ## 6. Custom Statuses & Resolution Reasons
 
