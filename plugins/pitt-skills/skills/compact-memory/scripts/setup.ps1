@@ -70,8 +70,11 @@ if (-not $alreadyHas) {
 }
 
 # --- 3. Add MEMORY.md index entry ---
+# Default Claude Code MEMORY.md is a flat bullet list with no heading. If a
+# `# Memory Index` heading exists, insert under it; otherwise prepend at top.
 $projectsDir = Join-Path $claudeHome 'projects'
-$added = 0
+$addedHeading = 0
+$addedTop = 0
 $skipped = 0
 if (Test-Path $projectsDir) {
     foreach ($projectDir in (Get-ChildItem $projectsDir -Directory -ErrorAction SilentlyContinue)) {
@@ -82,15 +85,17 @@ if (Test-Path $projectsDir) {
             $skipped++
             continue
         }
-        if ($content -notmatch '(?m)^# Memory Index') {
-            $skipped++
-            continue
+        $nl = if ($content -match "`r`n") { "`r`n" } else { "`n" }
+        if ($content -match '(?m)^# Memory Index') {
+            $new = [regex]::Replace($content, '(?m)^(# Memory Index *\r?\n+)', "`$1$indexLine$nl", 1)
+            $addedHeading++
+        } else {
+            $new = $indexLine + $nl + $content
+            $addedTop++
         }
-        $new = [regex]::Replace($content, '(?m)^(# Memory Index *\r?\n+)', "`$1$indexLine`n", 1)
         Set-Content -Path $memoryMd -Value $new -Encoding utf8 -NoNewline
-        $added++
     }
 }
-Write-Host "[3/3] MEMORY.md updates: added=$added, skipped=$skipped (already-present or no heading)"
+Write-Host "[3/3] MEMORY.md updates: $addedHeading under heading, $addedTop at top, $skipped already-present"
 
 Write-Host "Done. Run /compact in a long session to verify."
