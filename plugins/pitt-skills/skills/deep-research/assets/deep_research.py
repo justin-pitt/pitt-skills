@@ -41,6 +41,10 @@ class ResearchResult:
     sources: List[str] = field(default_factory=list)
     provider: str = ""
     model: str = ""
+    # Populated by the provider only when `report` is empty, so callers can
+    # inspect what the API actually returned on a no-text response (10-20
+    # minute calls; this is the only diagnostic path).
+    raw: dict | None = None
 
 
 def load_env(path: Path = DEFAULT_ENV_PATH) -> None:
@@ -142,12 +146,15 @@ def run_openai(
                 if url:
                     sources.append(url)
 
-    return ResearchResult(
+    result = ResearchResult(
         report=(response.output_text or "").strip(),
         sources=_dedupe(sources),
         provider="openai",
         model=model,
     )
+    if not result.report:
+        result.raw = response.model_dump(mode="json")
+    return result
 
 
 def run_anthropic(
@@ -194,12 +201,15 @@ def run_anthropic(
                 if url:
                     sources.append(url)
 
-    return ResearchResult(
+    result = ResearchResult(
         report="\n".join(report_parts).strip(),
         sources=_dedupe(sources),
         provider="anthropic",
         model=model,
     )
+    if not result.report:
+        result.raw = response.model_dump(mode="json")
+    return result
 
 
 def run_perplexity(
@@ -255,12 +265,15 @@ def run_perplexity(
             if isinstance(url, str):
                 sources.append(url)
 
-    return ResearchResult(
+    result = ResearchResult(
         report=report,
         sources=_dedupe(sources),
         provider="perplexity",
         model=model,
     )
+    if not result.report:
+        result.raw = data
+    return result
 
 
 PROVIDERS: dict[str, Callable[..., ResearchResult]] = {
@@ -364,7 +377,11 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     if not result.report:
-        print("No textual report returned.")
+        print(f"No textual report returned ({result.provider}/{result.model}).")
+        if result.raw is not None:
+            import json
+            print("\n=== Raw response (diagnostics) ===\n")
+            print(json.dumps(result.raw, indent=2, default=str))
         return
 
     if not args.no_save:
