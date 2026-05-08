@@ -1,161 +1,339 @@
 #!/usr/bin/env python3
-"""Simple CLI helper for the OpenAI Deep Research API."""
+"""Vendor-agnostic CLI for deep-research-style queries.
+
+Supports OpenAI (Deep Research API), Anthropic (Messages API + web_search tool),
+and Perplexity (sonar-deep-research). Provider is auto-detected from env keys
+unless --provider or DEEP_RESEARCH_PROVIDER is set.
+"""
 
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, List
+from typing import Callable, List
 
-from openai import OpenAI
-from openai._exceptions import OpenAIError
-from openai.types.responses.response import Response
-
-try:
-    from openai.types.responses.response_function_web_search import (
-        Action,
-        ActionFind,
-        ActionOpenPage,
-        ActionSearch,
-    )
-except ImportError:  # pragma: no cover - SDK drift safety net
-    Action = ActionFind = ActionOpenPage = ActionSearch = None  # type: ignore
-
-DEFAULT_MODEL = "o4-mini-deep-research"
-DEFAULT_TOOLS = [{"type": "web_search"}]
-DEFAULT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes runtime window
+DEFAULT_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_ENV_PATH = Path(".env")
-ENV_KEY = "OPENAI_API_KEY"
+
+PROVIDER_ENV_KEYS: dict[str, str] = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "perplexity": "PERPLEXITY_API_KEY",
+}
+
+DEFAULT_MODELS: dict[str, str] = {
+    "openai": "o4-mini-deep-research",
+    "anthropic": "claude-opus-4-7",
+    "perplexity": "sonar-deep-research",
+}
+
+ANTHROPIC_WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+ANTHROPIC_DEFAULT_MAX_TOKENS = 32000
+
+
+@dataclass
+class ResearchResult:
+    report: str
+    sources: List[str] = field(default_factory=list)
+    provider: str = ""
+    model: str = ""
 
 
 def load_env(path: Path = DEFAULT_ENV_PATH) -> None:
-    """Populate os.environ from a .env file if the target key is missing."""
-    if os.environ.get(ENV_KEY) or not path.exists():
+    """Populate os.environ from a .env file. Never overwrites existing values."""
+    if not path.exists():
         return
-
     for raw_line in path.read_text().splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
-
         key, value = line.split("=", 1)
         key = key.strip()
         if not key or key in os.environ:
             continue
-
-        cleaned = value.strip().strip('"').strip("'")
-        os.environ[key] = cleaned
+        os.environ[key] = value.strip().strip('"').strip("'")
 
 
-def extract_web_sources(response: Response) -> List[str]:
-    """Extract unique URLs referenced by web search tool calls."""
-    urls: List[str] = []
+def select_provider(explicit: str | None) -> str:
+    """Resolve provider in priority order: --provider, DEEP_RESEARCH_PROVIDER, key auto-detect."""
+    if explicit:
+        if explicit not in PROVIDER_ENV_KEYS:
+            raise SystemExit(
+                f"Unknown provider '{explicit}'. Choose one of: {', '.join(sorted(PROVIDER_ENV_KEYS))}"
+            )
+        return explicit
 
-    for item in response.output:
-        item_type = getattr(item, "type", None)
-        if item_type != "web_search_call":
-            continue
+    env_choice = os.environ.get("DEEP_RESEARCH_PROVIDER")
+    if env_choice:
+        if env_choice not in PROVIDER_ENV_KEYS:
+            raise SystemExit(
+                f"DEEP_RESEARCH_PROVIDER='{env_choice}' is not a known provider. "
+                f"Choose one of: {', '.join(sorted(PROVIDER_ENV_KEYS))}"
+            )
+        return env_choice
 
-        action: Action | None = getattr(item, "action", None)  # type: ignore[assignment]
-        if action is None:
-            continue
+    for name in PROVIDER_ENV_KEYS:
+        if os.environ.get(PROVIDER_ENV_KEYS[name]):
+            return name
 
-        action_type = getattr(action, "type", "")
-        if action_type == "search":
-            sources: Iterable | None = getattr(action, "sources", None)  # type: ignore[assignment]
-            for source in sources or []:
-                url = getattr(source, "url", None)
-                if url:
-                    urls.append(url)
-        elif action_type in {"find", "open_page"}:
-            url = getattr(action, "url", None)
-            if url:
-                urls.append(url)
+    raise SystemExit(
+        "No provider configured. Set --provider, DEEP_RESEARCH_PROVIDER, or one of: "
+        + ", ".join(PROVIDER_ENV_KEYS.values())
+    )
 
-    unique_urls: List[str] = []
-    seen = set()
+
+def _dedupe(urls: List[str]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
     for url in urls:
-        if url not in seen:
+        if url and url not in seen:
             seen.add(url)
-            unique_urls.append(url)
+            out.append(url)
+    return out
 
-    return unique_urls
 
-
-def run_research(
+def run_openai(
     prompt: str,
     *,
     instructions: str | None,
     model: str,
     include_sources: bool,
-    timeout_seconds: float,
-) -> Response:
-    load_env()
+    timeout: float,
+) -> ResearchResult:
+    from openai import OpenAI
+    from openai._exceptions import OpenAIError
 
-    api_key = os.environ.get(ENV_KEY)
-    if not api_key:
-        raise SystemExit(
-            "Missing OPENAI_API_KEY. Set it via environment or .env file before running the script."
-        )
-
-    client = OpenAI(api_key=api_key, timeout=timeout_seconds)
-
-    request_payload: dict = {
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=timeout)
+    payload: dict = {
         "model": model,
         "input": prompt,
-        "tools": DEFAULT_TOOLS,
+        "tools": [{"type": "web_search"}],
     }
     if instructions:
-        request_payload["instructions"] = instructions
+        payload["instructions"] = instructions
     if include_sources:
-        request_payload["include"] = ["web_search_call.action.sources"]
+        payload["include"] = ["web_search_call.action.sources"]
 
     try:
-        return client.responses.create(**request_payload)
+        response = client.responses.create(**payload)
     except OpenAIError as exc:
-        raise SystemExit(f"Deep Research request failed: {exc}") from exc
+        raise SystemExit(f"OpenAI Deep Research request failed: {exc}") from exc
+
+    sources: List[str] = []
+    if include_sources:
+        for item in response.output:
+            if getattr(item, "type", None) != "web_search_call":
+                continue
+            action = getattr(item, "action", None)
+            if action is None:
+                continue
+            atype = getattr(action, "type", "")
+            if atype == "search":
+                for src in getattr(action, "sources", None) or []:
+                    url = getattr(src, "url", None)
+                    if url:
+                        sources.append(url)
+            elif atype in {"find", "open_page"}:
+                url = getattr(action, "url", None)
+                if url:
+                    sources.append(url)
+
+    return ResearchResult(
+        report=(response.output_text or "").strip(),
+        sources=_dedupe(sources),
+        provider="openai",
+        model=model,
+    )
+
+
+def run_anthropic(
+    prompt: str,
+    *,
+    instructions: str | None,
+    model: str,
+    include_sources: bool,
+    timeout: float,
+) -> ResearchResult:
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=timeout)
+    request: dict = {
+        "model": model,
+        "max_tokens": ANTHROPIC_DEFAULT_MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+        "tools": [ANTHROPIC_WEB_SEARCH_TOOL],
+    }
+    if instructions:
+        request["system"] = instructions
+
+    try:
+        response = client.messages.create(**request)
+    except anthropic.AnthropicError as exc:
+        raise SystemExit(f"Anthropic request failed: {exc}") from exc
+
+    report_parts: List[str] = []
+    sources: List[str] = []
+    for block in response.content:
+        btype = getattr(block, "type", None)
+        if btype == "text":
+            text = getattr(block, "text", "")
+            if text:
+                report_parts.append(text)
+            if include_sources:
+                for citation in getattr(block, "citations", None) or []:
+                    url = getattr(citation, "url", None)
+                    if url:
+                        sources.append(url)
+        elif btype == "web_search_tool_result" and include_sources:
+            for item in getattr(block, "content", None) or []:
+                url = getattr(item, "url", None)
+                if url:
+                    sources.append(url)
+
+    return ResearchResult(
+        report="\n".join(report_parts).strip(),
+        sources=_dedupe(sources),
+        provider="anthropic",
+        model=model,
+    )
+
+
+def run_perplexity(
+    prompt: str,
+    *,
+    instructions: str | None,
+    model: str,
+    include_sources: bool,
+    timeout: float,
+) -> ResearchResult:
+    import json
+    import urllib.error
+    import urllib.request
+
+    messages: List[dict] = []
+    if instructions:
+        messages.append({"role": "system", "content": instructions})
+    messages.append({"role": "user", "content": prompt})
+
+    body = json.dumps({"model": model, "messages": messages}).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.perplexity.ai/chat/completions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"Perplexity request failed (HTTP {exc.code}): {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Perplexity request failed: {exc}") from exc
+
+    choices = data.get("choices") or []
+    report = ""
+    if choices:
+        message = choices[0].get("message") or {}
+        report = (message.get("content") or "").strip()
+
+    sources: List[str] = []
+    if include_sources:
+        for entry in data.get("search_results") or []:
+            url = entry.get("url")
+            if url:
+                sources.append(url)
+        for url in data.get("citations") or []:
+            if isinstance(url, str):
+                sources.append(url)
+
+    return ResearchResult(
+        report=report,
+        sources=_dedupe(sources),
+        provider="perplexity",
+        model=model,
+    )
+
+
+PROVIDERS: dict[str, Callable[..., ResearchResult]] = {
+    "openai": run_openai,
+    "anthropic": run_anthropic,
+    "perplexity": run_perplexity,
+}
+
+
+def run_research(
+    prompt: str,
+    *,
+    provider: str,
+    instructions: str | None,
+    model: str,
+    include_sources: bool,
+    timeout: float,
+) -> ResearchResult:
+    env_key = PROVIDER_ENV_KEYS[provider]
+    if not os.environ.get(env_key):
+        raise SystemExit(
+            f"Missing {env_key} for provider '{provider}'. "
+            "Set it in the environment or in a .env file."
+        )
+    return PROVIDERS[provider](
+        prompt,
+        instructions=instructions,
+        model=model,
+        include_sources=include_sources,
+        timeout=timeout,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Run a Deep Research query using the OpenAI API")
-    parser.add_argument("prompt", nargs="?", help="The research question or task you want to run")
-    parser.add_argument(
-        "--instructions",
-        help="Optional system instructions to steer the researcher",
+    parser = argparse.ArgumentParser(
+        description="Run a deep-research query against a configurable provider"
     )
+    parser.add_argument("prompt", nargs="?", help="The research question or task")
+    parser.add_argument(
+        "--provider",
+        choices=sorted(PROVIDERS),
+        help="Provider to use (default: DEEP_RESEARCH_PROVIDER, else first provider with API key set)",
+    )
+    parser.add_argument("--instructions", help="Optional system instructions")
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"Model to use (default: {DEFAULT_MODEL})",
+        help="Model to use (default: provider's deep-research default)",
     )
     parser.add_argument(
         "--prompt-file",
         type=Path,
-        help="Read the prompt text from a file instead of positional argument",
+        help="Read the prompt text from a file",
     )
     parser.add_argument(
         "--no-sources",
         action="store_true",
-        help="Disable best-effort extraction of web sources",
+        help="Skip extraction of web sources",
     )
     parser.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
-        help="Request timeout in seconds (default: 1800)",
+        help=f"Request timeout in seconds (default: {DEFAULT_TIMEOUT_SECONDS})",
     )
     parser.add_argument(
         "--output-file",
         type=Path,
-        help="Save research report to this markdown file (default: auto-generated timestamp)",
+        help="Save report to this markdown file (default: timestamped name)",
     )
     parser.add_argument(
         "--no-save",
         action="store_true",
-        help="Don't save the research report to a file",
+        help="Don't save the report to a file",
     )
 
     args = parser.parse_args(argv)
@@ -172,57 +350,45 @@ def main(argv: list[str] | None = None) -> None:
     if not prompt_text:
         parser.error("Provide a prompt via positional argument or --prompt-file.")
 
-    response = run_research(
+    load_env()
+    provider = select_provider(args.provider)
+    model = args.model or DEFAULT_MODELS[provider]
+
+    result = run_research(
         prompt_text,
+        provider=provider,
         instructions=args.instructions,
-        model=args.model,
+        model=model,
         include_sources=not args.no_sources,
-        timeout_seconds=args.timeout,
+        timeout=args.timeout,
     )
 
-    report = (response.output_text or "").strip()
-    if not report:
-        print("No textual report returned. Full response follows:\n")
-        print(response.model_dump_json(indent=2))
+    if not result.report:
+        print("No textual report returned.")
         return
 
-    # Extract sources
-    sources = extract_web_sources(response) if not args.no_sources else []
-
-    # Save to markdown file (unless --no-save is specified)
     if not args.no_save:
-        output_file = args.output_file
-        if not output_file:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = Path(f"research_report_{timestamp}.md")
+        output_file = args.output_file or Path(
+            f"research_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+        )
+        markdown = result.report
+        if result.sources:
+            markdown += "\n\n## Sources\n\n"
+            for idx, url in enumerate(result.sources, start=1):
+                markdown += f"{idx}. {url}\n"
+        markdown += f"\n\n---\n\n*Research conducted on: {datetime.now().strftime('%B %d, %Y')}*  \n"
+        markdown += f"*Provider: {result.provider}*  \n"
+        markdown += f"*Model: {result.model}*  \n"
+        output_file.write_text(markdown, encoding="utf-8")
+        print(f"Research report saved to: {output_file.absolute()}\n")
 
-        # Build markdown content
-        markdown_content = report
+    print(f"=== Deep Research Report ({result.provider}/{result.model}) ===\n")
+    print(result.report)
 
-        # Append sources if available
-        if sources:
-            markdown_content += "\n\n## Sources\n\n"
-            for idx, url in enumerate(sources, start=1):
-                markdown_content += f"{idx}. {url}\n"
-
-        # Add metadata footer
-        markdown_content += f"\n\n---\n\n*Research conducted on: {datetime.now().strftime('%B %d, %Y')}*  \n"
-        markdown_content += f"*Model: {args.model}*  \n"
-
-        # Save file
-        output_file.write_text(markdown_content, encoding="utf-8")
-        print(f"✅ Research report saved to: {output_file.absolute()}\n")
-
-    # Print to terminal
-    print("=== Deep Research Report ===\n")
-    print(report)
-
-    if args.no_sources or not sources:
-        return
-
-    print("\n=== Sources ===")
-    for idx, url in enumerate(sources, start=1):
-        print(f"{idx}. {url}")
+    if not args.no_sources and result.sources:
+        print("\n=== Sources ===")
+        for idx, url in enumerate(result.sources, start=1):
+            print(f"{idx}. {url}")
 
 
 if __name__ == "__main__":
