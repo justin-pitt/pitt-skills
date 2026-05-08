@@ -1,13 +1,13 @@
 ---
 applyTo: "**"
-description: This skill should be used when conducting comprehensive research on any topic using the OpenAI Deep Research API. It automates prompt enhancement through interactive clarifying questions, saves research parameters, and executes deep research with web search capabilities. Use when the user asks for in-depth analysis, investigation, research summaries, or topic exploration.
+description: Use when the user wants comprehensive web-search-backed research, in-depth investigation, analysis, comparison, or a topic survey. Triggers include "research X", "investigate Y", "comprehensive analysis of Z", "latest developments in", "current state of", or any prompt that requires browsing the web and synthesizing across sources.
 ---
 
 # Deep Research Skill
 
 ## Purpose
 
-This skill enables comprehensive, internet-enabled research on any topic using OpenAI's Deep Research API (o4-mini-deep-research model). It intelligently enhances user research prompts through interactive clarifying questions, ensures research parameters are saved for reproducibility, and executes deep research with full web search capabilities.
+Run comprehensive, web-search-backed research on any topic. Provider-agnostic: routes to OpenAI Deep Research, Anthropic Claude (web_search tool), or Perplexity sonar-deep-research based on which API key is configured. Enhances brief prompts via interactive clarifying questions, saves the enhanced prompt and the final report to timestamped files.
 
 ## When to Use This Skill
 
@@ -38,6 +38,8 @@ YES → Ask Enhancement Questions → Collect Answers
                     ↓
             Save to Timestamped File
                     ↓
+        Resolve Provider (--provider, env, auto-detect)
+                    ↓
             Execute deep_research.py
                     ↓
             Output Report + Sources
@@ -47,13 +49,7 @@ YES → Ask Enhancement Questions → Collect Answers
 
 ## How Claude Should Use This Skill
 
-**Important for Token Efficiency:**
-Deep research takes 10-20 minutes to complete. The skill is designed to run synchronously (blocking) without intermediate status checks. This approach minimizes token usage during the wait. Claude should:
-1. Start the research
-2. Wait for completion (subprocess blocks automatically)
-3. Present final results once complete
-
-No need for periodic polling or status updates during execution.
+**Token efficiency:** Deep research takes 10-20 minutes. The orchestrator runs `deep_research.py` as a blocking subprocess with no intermediate polling, so wait silently for completion and present the final result once.
 
 ### Step 1: Accept Research Request
 
@@ -61,44 +57,66 @@ Receive the user's research prompt. This can range from brief ("Latest AI trends
 
 ### Step 2: Execute the Orchestration Script
 
-Run the skill's main orchestration script with the user's research prompt:
+Run the skill's main orchestration script:
 
 ```bash
 python3 scripts/run_deep_research.py "Your research prompt here"
 ```
 
-The script is located at `scripts/run_deep_research.py` within the skill's installation.
+To force a specific provider:
+
+```bash
+python3 scripts/run_deep_research.py "Your prompt" --provider anthropic
+```
 
 ### Step 3: Script Execution Flow
 
 The script automatically:
 
-1. **Assesses prompt completeness**: Checks if prompt is too brief or generic (< 15 words or starts with "what is", "how to", etc.)
+1. **Assesses prompt completeness** (< 15 words or generic opener like "what is", "how to" → enhance)
 
 2. **Asks clarifying questions** (if needed):
-   - Presents 2-3 focused questions relevant to the research type
-   - Detects if research is technical or general based on keywords
-   - Allows users to select from predefined options (1-4) or provide custom text
-   - Questions cover: Scope/Timeframe, Depth level, Focus areas
+   - 2-3 focused questions; technical vs. general template based on keywords
+   - Numbered options (1-4) or free-text input
+   - Covers: Scope/Timeframe, Depth, Focus areas
 
-3. **Enhances the prompt**: Combines original prompt with user's answers into structured research parameters
+3. **Enhances the prompt**: Combines original prompt with answers into structured research parameters
 
-4. **Saves prompt file**: Writes enhanced prompt to `research_prompt_YYYYMMDD_HHMMSS.txt` for reproducibility
+4. **Saves prompt file**: Writes enhanced prompt to `research_prompt_YYYYMMDD_HHMMSS.txt`
 
-5. **Executes deep research**: Runs the core `deep_research.py` script with:
-   - Model: o4-mini-deep-research (configurable via `--model`)
+5. **Resolves provider** in this order:
+   - `--provider <name>` CLI flag
+   - `DEEP_RESEARCH_PROVIDER` env var
+   - First provider with its API key set: OpenAI → Anthropic → Perplexity
+   - Errors out if no provider can be resolved
+
+6. **Executes deep research** with the resolved provider:
+   - Default models: `o4-mini-deep-research` (OpenAI), `claude-opus-4-7` (Anthropic), `sonar-deep-research` (Perplexity)
    - Timeout: 1800 seconds / 30 minutes (configurable via `--timeout`)
-   - Tools: Web search enabled by default
+   - Web search enabled
 
 ### Step 4: Present Results to User
 
 The script automatically:
-- **Saves markdown file**: Research report with sources saved to `research_report_YYYYMMDD_HHMMSS.md`
-- **Prints to terminal**: Complete research report with markdown formatting
-- **Lists web sources**: Numbered URLs referenced in the research
-- **Confirms completion**: Path where research files were saved
+- Saves the report to `research_report_YYYYMMDD_HHMMSS.md`
+- Prints the report to the terminal
+- Lists web sources (numbered URLs)
+- Footer in the saved file records provider and model used
 
-**Token Efficiency Note**: Deep research takes 10-20 minutes. The script runs synchronously (blocking) without intermediate polling, minimizing token usage during the wait.
+## Providers
+
+| Provider | Default model | Env key | SDK / dependency |
+|----------|---------------|---------|------------------|
+| `openai` | `o4-mini-deep-research` | `OPENAI_API_KEY` | `openai` Python SDK |
+| `anthropic` | `claude-opus-4-7` | `ANTHROPIC_API_KEY` | `anthropic` Python SDK |
+| `perplexity` | `sonar-deep-research` | `PERPLEXITY_API_KEY` | stdlib `urllib` (no extra dep) |
+
+Provider-specific notes:
+- **OpenAI**: Uses the Responses API with the `web_search` tool. Sources extracted from `web_search_call` actions.
+- **Anthropic**: Uses Messages API with the `web_search_20250305` server-side tool. Sources extracted from `citations` blocks and `web_search_tool_result` blocks.
+- **Perplexity**: Plain `chat/completions` POST. Sources from `search_results` (preferred) and `citations` (legacy fallback).
+
+SDKs are imported lazily, so you only need to install the provider you use.
 
 ## Bundled Resources
 
@@ -106,39 +124,31 @@ The script automatically:
 
 #### `scripts/run_deep_research.py` (Main Entry Point)
 
-The orchestration script that handles:
-- Prompt quality assessment
-- Interactive enhancement questions (with smart detection for technical vs. general research)
-- Prompt saving and timestamping
-- Execution of core deep research
+Orchestration script: prompt assessment, enhancement Q&A, prompt saving, dispatch.
 
-**Key Features:**
-- Smart enhancement: Only asks questions if prompt is brief/generic
-- Template-based questions: Different question sets for technical vs. general research
-- Flexible input: Numbered options + custom text input
-- Error handling: Helpful messages if deep_research.py is not found
-
-**Available options:**
+**Options:**
 ```
 python3 run_deep_research.py <prompt> [OPTIONS]
   --no-enhance              Skip enhancement questions
-  --model <model>           Model to use (default: o4-mini-deep-research)
+  --provider <name>         openai | anthropic | perplexity (default: auto-detect)
+  --model <model>           Override the provider's default model
   --timeout <seconds>       Timeout in seconds (default: 1800)
-  --output-dir <path>       Where to save prompt file
+  --output-dir <path>       Where to save the prompt file
 ```
 
 #### `assets/deep_research.py`
 
-Core script that interfaces with OpenAI's Deep Research API. Handles:
-- API authentication via OPENAI_API_KEY
-- Request creation and execution
-- **Automatic markdown saving**: Saves timestamped report files by default
-- Output formatting (report + sources with metadata)
-- Error handling and retries
+Provider-agnostic core. Resolves the provider, calls its API, normalizes the report and source list, saves a timestamped markdown file.
 
-**New command-line options:**
+**Options:**
 ```
---output-file <path>      Custom output file path
+--provider <name>         Force provider (default: DEEP_RESEARCH_PROVIDER, else auto-detect)
+--model <model>           Override the provider's default model
+--instructions <text>     Optional system instructions
+--prompt-file <path>      Read prompt from a file
+--no-sources              Skip source extraction
+--timeout <seconds>       Request timeout (default: 1800)
+--output-file <path>      Custom output markdown path
 --no-save                 Disable automatic markdown saving
 ```
 
@@ -146,24 +156,16 @@ Core script that interfaces with OpenAI's Deep Research API. Handles:
 
 #### `references/workflow.md`
 
-Detailed workflow documentation covering:
-- Complete skill workflow with examples
-- Prompt enhancement strategies
-- Research parameters explanation
-- Integration guidance for Claude
-- Command-line interface reference
-- Error handling and troubleshooting
-- Tips for effective research
+Detailed workflow doc: enhancement strategy, parameters, provider details, troubleshooting, tips.
 
 ## Key Behaviors
 
 ### Smart Prompt Enhancement
 
-The skill intelligently determines whether enhancement is needed:
-- **Triggers enhancement** for prompts with < 15 words or generic starts
-- **Skips enhancement** for detailed, specific prompts
-- **Allows users** to disable with `--no-enhance` flag
-- **Template-aware**: Uses different questions for technical vs. general research
+- Triggers enhancement for prompts with < 15 words or generic openers
+- Skips enhancement for detailed prompts
+- `--no-enhance` flag disables it entirely
+- Template-aware: technical vs. general question sets
 
 ### Research Parameters
 
@@ -173,102 +175,99 @@ Enhanced prompts include:
 - Desired depth level (summary, technical, implementation, comparative)
 - Specific focus areas (performance, cost, security, etc.)
 
-These parameters help the deep research model deliver more targeted, relevant results.
-
 ### Reproducibility
 
-Every research execution:
-- Saves the exact prompt used to a timestamped file
-- Enables tracing research decisions
-- Allows follow-up research using same/modified prompts
-- Maintains audit trail of research parameters
+Every run saves the exact prompt to a timestamped file and writes a markdown report with a footer recording provider, model, and date.
 
 ## Examples
 
-### Brief Prompt with Enhancement
+### Brief Prompt with Enhancement (auto-detected provider)
 
 **User:** "Research the most effective opensource RAG solutions"
 
-**Script behavior:**
-1. Detects brief prompt (12 words) + technical keywords ("opensource", "RAG")
-2. Asks technical research questions:
-   - Technology scope: Open-source only? (User: Yes)
-   - Key metrics: Performance/benchmarks? (User: Speed and Accuracy)
-   - Use cases: Production deployment? (User: Multiple aspects)
-3. Enhances to detailed prompt with parameters
-4. Saves and executes deep research
-5. Returns comprehensive report with comparative benchmarks and source URLs
+**Script:**
+1. Detects 12 words + technical keywords → enhancement on
+2. Asks 3 technical questions, collects answers
+3. Saves enhanced prompt
+4. Resolves provider: `OPENAI_API_KEY` set → `openai`
+5. Runs `o4-mini-deep-research`
+6. Saves report and prints to terminal
 
-### Detailed Prompt Without Enhancement
+### Detailed Prompt, Forced Provider
 
 **User:** "Analyze the impact of large language models on software developer productivity in 2024-2025, focusing on code generation tools, pair programming, and productivity metrics."
 
-**Script behavior:**
-1. Detects detailed prompt (24 words) with specific scope/focus
-2. Skips enhancement questions
-3. Saves and executes deep research immediately
-4. Returns focused analysis aligned with user specifications
+```bash
+python3 scripts/run_deep_research.py "Analyze the impact of..." --provider anthropic
+```
+
+**Script:**
+1. 24 words + specific scope → skip enhancement
+2. Saves prompt
+3. Forces `anthropic` provider, uses `claude-opus-4-7` with web_search
+4. Saves report and prints to terminal
 
 ## Requirements
 
-- Python 3.7+
-- OpenAI API key (set via `OPENAI_API_KEY` environment variable or `.env` file)
-- Internet connection (for web search)
+- Python 3.10+ (for `dict[...]` and `str | None` syntax)
+- API key for at least one supported provider (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `PERPLEXITY_API_KEY`)
+- The matching SDK installed for whichever providers you use:
+  - `pip install openai` for OpenAI
+  - `pip install anthropic` for Anthropic
+  - (Perplexity uses stdlib only)
+- Internet connection
 - 30+ minutes for research completion (configurable timeout)
 
 ## Token-Efficient Workflow
 
-### Long-Running Task Optimization
-
-Deep research queries typically take **10-20 minutes** to complete. This skill is optimized to minimize token usage during long waits:
-
-**How it works:**
-1. **Synchronous execution**: The script runs as a blocking subprocess (no background polling)
-2. **No intermediate checks**: Claude waits silently for completion without status updates
-3. **Single output**: Results are presented once at the end
-4. **Automatic saving**: Markdown files are saved automatically, no manual intervention needed
-
-**Token savings:**
-- Traditional approach: Checking status every 30 seconds = ~40 checks × 500 tokens = ~20,000 tokens wasted
-- This approach: Single wait = ~1,000 tokens total
-
-### Automatic File Management
-
-The skill automatically generates and saves files:
+Deep research queries take 10-20 minutes. The orchestrator runs as a blocking subprocess; Claude waits silently and presents results once. No periodic polling.
 
 **Generated files:**
-- `research_prompt_YYYYMMDD_HHMMSS.txt` - Enhanced research prompt with parameters
-- `research_report_YYYYMMDD_HHMMSS.md` - Complete markdown report with:
-  - Research sections (historical, cognitive, cultural, etc.)
-  - Numbered source citations
-  - Metadata footer (date, model)
+- `research_prompt_YYYYMMDD_HHMMSS.txt` — Enhanced research prompt with parameters
+- `research_report_YYYYMMDD_HHMMSS.md` — Full report with sources and provider/model footer
 
-**Customization options:**
+**Customization:**
 ```bash
 # Custom output location
-python3 deep_research.py --prompt-file prompt.txt --output-file my_research.md
+python3 assets/deep_research.py --prompt-file prompt.txt --output-file my_research.md
 
-# Disable automatic saving (terminal output only)
-python3 deep_research.py --prompt-file prompt.txt --no-save
+# Disable automatic saving (terminal only)
+python3 assets/deep_research.py --prompt-file prompt.txt --no-save
+
+# Force a provider and model
+python3 assets/deep_research.py --prompt-file prompt.txt --provider perplexity --model sonar-deep-research
 ```
 
 ## Troubleshooting
 
-### Missing OPENAI_API_KEY
+### No provider configured
 
-**Error:** "Missing OPENAI_API_KEY"
+**Error:** `No provider configured. Set --provider, DEEP_RESEARCH_PROVIDER, or one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, PERPLEXITY_API_KEY`
 
 **Solution:**
-- Set environment variable: `export OPENAI_API_KEY="your-key"`
-- Or create `.env` file in working directory with `OPENAI_API_KEY=your-key`
+- Set one of the three API key env vars (or in a `.env` file in the working directory)
+- Or pass `--provider <name>` and ensure that provider's key is set
+- Or set `DEEP_RESEARCH_PROVIDER=<name>` to pin the choice
+
+### Missing API key for the chosen provider
+
+**Error:** `Missing OPENAI_API_KEY for provider 'openai'.` (or equivalent for Anthropic/Perplexity)
+
+**Solution:**
+- Set the matching env var or add it to `.env`
+- Or switch providers via `--provider`
+
+### Missing SDK
+
+**Error:** `ModuleNotFoundError: No module named 'openai'` (or `anthropic`)
+
+**Solution:** `pip install openai` or `pip install anthropic` for whichever providers you use. Perplexity needs no extra package.
 
 ### deep_research.py Not Found
 
 **Error:** "Could not find deep_research.py"
 
-**Solution:**
-- Ensure skill is properly installed with assets
-- Script searches in: skill assets folder → current directory → parent directory
+**Solution:** Ensure the skill is properly installed with assets. The script searches: skill assets folder → current directory → parent directory.
 
 ### Research Timeout
 
@@ -276,5 +275,5 @@ python3 deep_research.py --prompt-file prompt.txt --no-save
 
 **Solution:**
 - Increase timeout: `--timeout 5400` (90 minutes)
-- Simplify prompt to reduce research scope
-- Run during off-peak hours for potentially faster API responses
+- Simplify the prompt to reduce research scope
+- Try a different provider (Anthropic/Perplexity often return faster than OpenAI's deep-research models)

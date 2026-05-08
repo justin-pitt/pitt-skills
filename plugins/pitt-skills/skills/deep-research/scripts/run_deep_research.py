@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
-"""
-Deep Research Skill Orchestrator
+"""Deep Research skill orchestrator.
 
-This script enhances user research prompts through interactive questions,
-saves the enhanced prompt, and executes deep_research.py to run the research.
+Enhances brief or generic research prompts through interactive clarifying
+questions, saves the enhanced prompt, and dispatches deep_research.py against
+the configured provider (OpenAI, Anthropic, or Perplexity).
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import subprocess
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 
-# Prompt enhancement question templates by research type
 ENHANCEMENT_TEMPLATES = {
     "general": {
         "scope": {
@@ -28,8 +24,8 @@ ENHANCEMENT_TEMPLATES = {
                 "Latest developments (2024-2025)",
                 "Historical overview (all time)",
                 "Specific time period (please specify)",
-                "No preference"
-            ]
+                "No preference",
+            ],
         },
         "depth": {
             "question": "What level of detail do you need?",
@@ -37,8 +33,8 @@ ENHANCEMENT_TEMPLATES = {
                 "Executive summary",
                 "Technical deep dive",
                 "Implementation guide",
-                "Comparative analysis"
-            ]
+                "Comparative analysis",
+            ],
         },
         "focus": {
             "question": "Any specific aspects or domains to focus on?",
@@ -47,9 +43,9 @@ ENHANCEMENT_TEMPLATES = {
                 "Cost/Efficiency",
                 "Ease of use/Adoption",
                 "Security/Privacy",
-                "Multiple aspects"
-            ]
-        }
+                "Multiple aspects",
+            ],
+        },
     },
     "technical": {
         "scope": {
@@ -58,8 +54,8 @@ ENHANCEMENT_TEMPLATES = {
                 "Open-source only",
                 "Open-source + enterprise",
                 "Language/framework specific",
-                "No restriction"
-            ]
+                "No restriction",
+            ],
         },
         "metrics": {
             "question": "What performance metrics matter most?",
@@ -68,8 +64,8 @@ ENHANCEMENT_TEMPLATES = {
                 "Accuracy/Correctness",
                 "Scalability",
                 "Resource usage",
-                "Multiple metrics"
-            ]
+                "Multiple metrics",
+            ],
         },
         "use_case": {
             "question": "Any specific use cases or applications?",
@@ -77,16 +73,15 @@ ENHANCEMENT_TEMPLATES = {
                 "Production deployment",
                 "Research/Evaluation",
                 "Learning/Education",
-                "General exploration"
-            ]
-        }
-    }
+                "General exploration",
+            ],
+        },
+    },
 }
 
 
 def is_prompt_too_brief(prompt: str) -> bool:
-    """Check if prompt needs enhancement (too short or lacking detail)."""
-    # Prompts with less than 15 words or very generic are considered brief
+    """Return True if the prompt is short or starts with a generic opener."""
     word_count = len(prompt.split())
     generic_patterns = ["what is", "how to", "tell me about"]
     is_generic = any(prompt.lower().startswith(p) for p in generic_patterns)
@@ -94,28 +89,33 @@ def is_prompt_too_brief(prompt: str) -> bool:
 
 
 def ask_enhancement_questions(prompt: str) -> str:
-    """Ask user clarifying questions to enhance the prompt."""
-    # Detect if it's a technical research prompt
-    technical_keywords = ["algorithm", "framework", "benchmark", "api", "architecture", "library", "tool", "system"]
+    """Ask the user clarifying questions and append answers as research parameters."""
+    technical_keywords = [
+        "algorithm",
+        "framework",
+        "benchmark",
+        "api",
+        "architecture",
+        "library",
+        "tool",
+        "system",
+    ]
     is_technical = any(kw in prompt.lower() for kw in technical_keywords)
+    template = ENHANCEMENT_TEMPLATES["technical" if is_technical else "general"]
 
-    template_type = "technical" if is_technical else "general"
-    template = ENHANCEMENT_TEMPLATES[template_type]
-
-    print(f"\n📋 Let's refine your research prompt...")
+    print("\nLet's refine your research prompt...")
     print(f"Original prompt: {prompt}\n")
 
     enhanced_parts = []
-
-    for question_key, question_data in template.items():
+    for question_data in template.values():
         print(f"\n{question_data['question']}")
-        for i, option in enumerate(question_data['options'], 1):
+        for i, option in enumerate(question_data["options"], 1):
             print(f"  {i}. {option}")
 
         while True:
             response = input("Your choice (number or custom text): ").strip()
-            if response.isdigit() and 1 <= int(response) <= len(question_data['options']):
-                selected = question_data['options'][int(response) - 1]
+            if response.isdigit() and 1 <= int(response) <= len(question_data["options"]):
+                selected = question_data["options"][int(response) - 1]
                 if "specify" in selected.lower() or "custom" in selected.lower():
                     custom = input("Please specify: ").strip()
                     enhanced_parts.append(custom if custom else selected)
@@ -123,89 +123,89 @@ def ask_enhancement_questions(prompt: str) -> str:
                     enhanced_parts.append(selected)
                 break
             elif response:
-                # Allow custom text input
                 enhanced_parts.append(response)
                 break
             else:
                 print("Invalid input. Please try again.")
 
-    # Construct enhanced prompt
     enhanced_prompt = f"{prompt}\n\nResearch parameters:\n"
     enhanced_prompt += "\n".join(f"- {part}" for part in enhanced_parts)
-
     return enhanced_prompt
 
 
 def save_research_prompt(prompt: str, output_dir: Optional[Path] = None) -> Path:
-    """Save the research prompt to a file."""
+    """Persist the enhanced prompt to a timestamped file for reproducibility."""
     if output_dir is None:
         output_dir = Path.cwd()
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     prompt_file = output_dir / f"research_prompt_{timestamp}.txt"
-
     prompt_file.write_text(prompt, encoding="utf-8")
-    print(f"\n💾 Research prompt saved to: {prompt_file}")
-
+    print(f"\nResearch prompt saved to: {prompt_file}")
     return prompt_file
 
 
 def get_deep_research_path() -> Path:
-    """Get the path to deep_research.py."""
-    # Try relative to this script first (for skill assets)
+    """Locate deep_research.py inside the skill or in nearby directories."""
     script_dir = Path(__file__).parent
     skill_assets = script_dir.parent / "assets" / "deep_research.py"
     if skill_assets.exists():
         return skill_assets
 
-    # Fall back to looking in common locations
     cwd = Path.cwd()
     if (cwd / "deep_research.py").exists():
         return cwd / "deep_research.py"
-
     if (cwd.parent / "deep_research.py").exists():
         return cwd.parent / "deep_research.py"
 
     raise FileNotFoundError(
-        "Could not find deep_research.py. Please ensure it's in the skill assets folder or current directory."
+        "Could not find deep_research.py. Ensure it lives in the skill assets folder or current directory."
     )
 
 
-def run_deep_research(prompt_file: Path, model: str = "o4-mini-deep-research", timeout: int = 1800) -> None:
-    """Execute deep_research.py with the research prompt."""
+def run_deep_research(
+    prompt_file: Path,
+    *,
+    provider: Optional[str],
+    model: Optional[str],
+    timeout: int,
+) -> None:
+    """Invoke deep_research.py as a subprocess and stream its output."""
     deep_research_py = get_deep_research_path()
 
-    print(f"\n🚀 Running Deep Research")
-    print(f"   Model: {model}")
+    print("\nRunning Deep Research")
+    print(f"   Provider: {provider or 'auto-detect'}")
+    print(f"   Model: {model or 'provider default'}")
     print(f"   Timeout: {timeout} seconds ({timeout // 60} minutes)")
-    print(f"   Estimated time: 10-20 minutes")
-    print(f"\n⏳ Research in progress... (this may take a while)\n")
+    print("   Estimated time: 10-20 minutes")
+    print("\nResearch in progress... (this may take a while)\n")
 
     cmd = [
         sys.executable,
         str(deep_research_py),
         "--prompt-file",
         str(prompt_file),
-        "--model",
-        model,
         "--timeout",
         str(timeout),
     ]
+    if provider:
+        cmd.extend(["--provider", provider])
+    if model:
+        cmd.extend(["--model", model])
 
     try:
         subprocess.run(cmd, check=True)
-        print(f"\n✅ Deep Research completed successfully!")
+        print("\nDeep Research completed successfully.")
     except subprocess.CalledProcessError as exc:
-        print(f"\n❌ Deep Research execution failed with exit code {exc.returncode}")
-        raise SystemExit(f"Research execution failed") from exc
+        print(f"\nDeep Research execution failed with exit code {exc.returncode}")
+        raise SystemExit("Research execution failed") from exc
     except FileNotFoundError as exc:
-        print(f"\n❌ Could not execute deep_research.py: {exc}")
+        print(f"\nCould not execute deep_research.py: {exc}")
         raise SystemExit("Missing deep_research.py executable") from exc
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Enhance a research prompt and run Deep Research API query"
+        description="Enhance a research prompt and run a Deep Research query"
     )
     parser.add_argument(
         "prompt",
@@ -218,9 +218,13 @@ def main(argv: list[str] | None = None) -> None:
         help="Skip prompt enhancement questions",
     )
     parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic", "perplexity"],
+        help="Provider to use (default: auto-detect from env keys)",
+    )
+    parser.add_argument(
         "--model",
-        default="o4-mini-deep-research",
-        help="Model to use (default: o4-mini-deep-research)",
+        help="Model override (default: provider's deep-research default)",
     )
     parser.add_argument(
         "--timeout",
@@ -235,22 +239,22 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
-
     if not args.prompt:
         parser.error("Provide a research prompt as a positional argument.")
 
-    # Determine if enhancement is needed
     prompt = args.prompt
     if not args.no_enhance and is_prompt_too_brief(prompt):
         prompt = ask_enhancement_questions(prompt)
     elif not args.no_enhance:
-        print(f"\n✓ Prompt seems detailed enough, skipping enhancement questions.")
+        print("\nPrompt looks detailed enough; skipping enhancement questions.")
 
-    # Save the prompt
     prompt_file = save_research_prompt(prompt, args.output_dir)
-
-    # Run deep research
-    run_deep_research(prompt_file, args.model, args.timeout)
+    run_deep_research(
+        prompt_file,
+        provider=args.provider,
+        model=args.model,
+        timeout=args.timeout,
+    )
 
 
 if __name__ == "__main__":
