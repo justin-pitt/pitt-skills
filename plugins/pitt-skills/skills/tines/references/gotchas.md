@@ -139,6 +139,18 @@ Not easy to find from the navigation docs; must be probed.
 
 The "Recent events" pane inside the story builder shows raw JSON payloads — good for debugging during build but wildly unsuitable as an analyst consumption surface. For human-facing output, route to Cases (Enterprise only), Pages, Send Email, Slack/Teams webhooks, or an external sink like `webhook.site`. CE without Cases has no built-in analyst view; plan for an external sink.
 
+### 19. `PUT /api/v1/stories/{id}` silently discards `diagram_layout`
+
+Exports include `diagram_layout` as a JSON-encoded string mapping `agent_guid → [x, y]`. Sending that field back via `PUT /api/v1/stories/{id}` returns 200 but does nothing — `diagram_layout` is a derived projection of all per-action positions, not the source of truth.
+
+To update layout programmatically:
+
+1. `GET /api/v1/actions?story_id={id}&per_page=100` to map each `agent.guid → action.id` (integer id, separate from guid).
+2. For each agent to reposition: `PUT /api/v1/actions/{action_id}` with body `{"position": {"x": <int>, "y": <int>}}`.
+3. Tines snaps `x` and `y` to a 15px grid (e.g., `±98` becomes `±105` on read-back). Functionally identical, but plan spacing as multiples of 15 if you want byte-equal round-trips.
+
+Re-export the story after the per-action PUTs to see `diagram_layout` reflect the new positions. Reusable Python relayout script (uses topological depth + parallel-sibling row): `c:\Code\tines\scripts\relayout_stories.py`.
+
 ---
 
 ## What to do when you hit an un-documented thing

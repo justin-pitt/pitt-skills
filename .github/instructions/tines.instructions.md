@@ -99,6 +99,24 @@ In addition to the eight Action types, four **Tools** can be dragged onto the St
 
 Plus the **Run Script** tool when arbitrary Python or JavaScript is required.
 
+## Storyboard Layout Conventions
+
+Stories read top-down. The Storyboard canvas uses pixel coordinates snapped to a 15px grid; in practice build with:
+
+- **y_step = 105** between sequential actions
+- **x_step = 195** between parallel siblings (or ±105 for a tighter centered spread)
+
+Rules of thumb:
+
+1. **Sequential actions stack vertically.** Each next step gets the next `y` increment; `x` stays constant. Reading order is top-to-bottom.
+2. **Parallel siblings share a row.** When one action has multiple downstream receivers, give them the same `y` and offset `x` symmetrically (e.g., `[-105, +105]` or `[0, +195]`). Centering on the main column keeps the spine of the story visually anchored.
+3. **Conditional branches use the parallel-row pattern.** True/false outcomes from a Condition sit on the same row, offset by `x`. The converging downstream action goes below them.
+4. **Avoid trailing left-to-right drift.** Common antipattern: after a vertical lookup column, the post-processing chain (Synthesize → Condition → Output) drifts rightward across multiple `x` positions instead of continuing down. Re-stack vertically.
+
+Visual layout is purely cosmetic — the runtime graph is the `links` array — but a consistently top-down canvas makes stories scannable in code review and reduces eye-tracking during incident triage.
+
+**Programmatic relayout:** position is stored as per-action `position: {x, y}` and updated via `PUT /api/v1/actions/{id}`. The story-level `diagram_layout` field in exports is a derived projection, not the source of truth — `PUT /api/v1/stories/{id}` with `diagram_layout` returns 200 but does nothing. See `references/gotchas.md` #19.
+
 ## Stories: Modes, Versioning, and Change Control
 
 - **Story modes**: `LIVE` (production) or `DRAFT` (testing). Each Story has a single LIVE version and can have an active DRAFT.
