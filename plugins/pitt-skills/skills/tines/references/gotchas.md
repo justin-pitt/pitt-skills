@@ -151,6 +151,18 @@ To update layout programmatically:
 
 Re-export the story after the per-action PUTs to see `diagram_layout` reflect the new positions. Reusable Python relayout script (uses topological depth + parallel-sibling row): `c:\Code\tines\scripts\relayout_stories.py`.
 
+### 20. `/api/v2/cases*` is gated to paid tiers (401 on Community Edition)
+
+Cases v2 endpoints (`/api/v2/cases`, `/api/v2/cases/{id}/comments`, `/api/v2/cases/{id}/activities`, etc.) require a paid tier. CE tenants get `401 "tenant does not have access"` regardless of API key permissions — this is a tenant-level entitlement gate, not an auth gate.
+
+Practical implications:
+
+- API smoke tests targeting `/api/v2/cases*` on a CE tenant will always fail; don't burn cycles debugging the request shape or token scope.
+- For CE-compatible case-style state (incident tracking, multi-step investigations), back it with **Records** instead. The data model is similar enough for triage-style workflows.
+- Pages can host the analyst-facing UI without needing Cases.
+
+Confirmed on `lingering-waterfall-1781`. Scope case management early in any Tines build: the tier is the limiter, not the API design. See also gotcha #18 (the storyboard Events pane is not an analyst surface) — CE without Cases has no built-in analyst view, so external sinks (Pages, webhook.site, Slack) become load-bearing.
+
 ---
 
 ## What to do when you hit an un-documented thing
