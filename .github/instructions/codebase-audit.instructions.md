@@ -32,11 +32,11 @@ Capture:
 - Languages present, inferred from file extensions via `Glob` (e.g., `**/*.py`, `**/*.ts`, `**/*.tsx`, `**/*.go`).
 - Frameworks present, inferred from manifest files: `package.json`, `pyproject.toml`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`.
 - Git state: current branch and dirty/clean.
-- Rough file count: `find . -type f -not -path './.git/*' | wc -l`.
+- Rough file count: use the `Glob` tool with pattern `**/*` then count results. Skip files under `.git/`, `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/` to keep the count meaningful.
 
 ### Step 2 — Huge-repo guard
 
-If file count > 500, ask the user via `AskUserQuestion` whether to:
+If file count > 1500 (calibrated so typical Django/Next.js projects don't trip the guard; small CLI tools and libraries are well under), ask the user via `AskUserQuestion` whether to:
 - Proceed with full audit (slower).
 - Limit to recently-changed directories (last 7 days, via `git log --since='7 days ago' --name-only`).
 - Accept a user-supplied subdirectory list.
@@ -64,14 +64,17 @@ Each subagent returns a JSON-ish flat list:
     "dimension": "bug|vuln|ux|perf",
     "title": "one-line summary",
     "why": "1-2 sentence explanation",
-    "suggested_fix": "what to change"
+    "suggested_fix": "what to change",
+    "confidence": null
   }
 ]
 ```
 
+Dimension subagents leave `confidence` as `null`; the controller fills it in Step 5 after Haiku scoring.
+
 ### Step 5 — Confidence-score findings via parallel Haiku scorers
 
-For each finding, dispatch a Haiku agent (`model: haiku`) to score 0-100 confidence using the rubric below. Run all scorers in one parallel batch (multiple `Task` tool_use blocks in one message).
+For each finding, dispatch a Haiku agent (`Task` tool, `subagent_type: general-purpose`, `model: haiku`) to score 0-100 confidence using the rubric below. Run all scorers in one parallel batch (multiple `Task` tool_use blocks in one message). The scorer reads the finding (and may verify by reading the cited file/line), then returns a single integer 0-100; the controller attaches this back to the finding as a `confidence` field before Step 6.
 
 ### Step 6 — Filter + rank
 
@@ -159,16 +162,20 @@ Filter cutoff: **70**. Cap total findings at **15** (drop lowest-confidence firs
 
 ## Interactive walk-through
 
-Use `AskUserQuestion` per finding. Question template:
+Use `AskUserQuestion` per finding. Pass these fields:
 
-- `question`: `<dimension> finding N/M — <severity>` (e.g., "Vuln finding 3/12 — high")
-- `header`: short label, max 12 chars (e.g., "Vuln 3/12")
-- `options`:
-  - **Fix it** — Apply the suggested fix now. I'll dispatch an implementer subagent with the finding context.
-  - **Defer** — Save to `docs/audit/<today>-deferred.md` to address later.
-  - **Ignore** — Skip; this is a false positive or not worth fixing.
+- `question`: `<dimension> finding N/M — <severity>` (e.g., "Vuln finding 3/12 — high"). Include file:line, title, 1-2 sentence "why", and the suggested fix on separate lines inside the question body so the user has enough context to choose.
+- `header`: short label, max 12 chars (e.g., "Vuln 3/12").
+- `multiSelect`: `false`.
+- `options`: exactly three, each with both `label` and `description`:
 
-Show the user: file:line, title, 1-2 sentence "why", suggested fix.
+```json
+[
+  { "label": "Fix it",  "description": "Apply the suggested fix now. The controller will dispatch an implementer subagent with the finding context." },
+  { "label": "Defer",   "description": "Save the finding to docs/audit/<today>-deferred.md to address later." },
+  { "label": "Ignore",  "description": "Skip; this is a false positive or not worth fixing." }
+]
+```
 
 **On Fix:** dispatch an implementer subagent (`Task` tool, `general-purpose`, `model: sonnet`) with:
 - The finding (severity, file:line, title, why, suggested_fix)
@@ -177,7 +184,7 @@ Show the user: file:line, title, 1-2 sentence "why", suggested fix.
 
 After the implementer returns, continue to the next finding.
 
-**On Defer:** ensure `docs/audit/` exists. Append (do not overwrite) to `docs/audit/<YYYY-MM-DD>-deferred.md` with this format:
+**On Defer:** ensure `docs/audit/` exists. Append (do not overwrite) to `docs/audit/<YYYY-MM-DD>-deferred.md`. On the first deferred finding of this run, append a header line `## <HH:MM UTC>` so re-runs the same day stay separated. Then append a bullet in this format:
 
 ```markdown
 - [<severity>] <dimension>: <title> — `<file>:<line>` — <why>. Fix: <suggested_fix>.
