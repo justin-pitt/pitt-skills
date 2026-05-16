@@ -113,7 +113,7 @@ Loop until all findings processed. End with a one-paragraph summary: fixed N, de
 
 - **No findings in any dimension:** print "Audit clean." and exit. No interactive walk-through.
 - **Subagent fails or times out:** note which dimension dropped in the final summary, continue with the remaining dimensions.
-- **Huge repos (>500 files):** before dispatching, warn and ask whether to proceed full, scope to recently-changed directories (last 7 days), or accept a user-supplied subdirectory list.
+- **Huge repos (>1500 files; calibrated so typical Django/Next.js projects don't trip the guard, while small CLI tools and libraries stay well under):** before dispatching, warn and ask whether to proceed full, scope to recently-changed directories (last 7 days), or accept a user-supplied subdirectory list.
 - **Re-run same day:** the `docs/audit/YYYY-MM-DD-deferred.md` file appends rather than overwrites.
 - **Project root ambiguous:** ask the user explicitly which directory to audit.
 

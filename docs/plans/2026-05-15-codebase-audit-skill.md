@@ -135,11 +135,11 @@ Capture:
 - Languages present, inferred from file extensions via `Glob` (e.g., `**/*.py`, `**/*.ts`, `**/*.tsx`, `**/*.go`).
 - Frameworks present, inferred from manifest files: `package.json`, `pyproject.toml`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`.
 - Git state: current branch and dirty/clean.
-- Rough file count: `find . -type f -not -path './.git/*' | wc -l`.
+- Rough file count: use the `Glob` tool with pattern `**/*` then count results. Skip files under `.git/`, `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/` to keep the count meaningful.
 
 ### Step 2 — Huge-repo guard
 
-If file count > 500, ask the user via `AskUserQuestion` whether to:
+If file count > 1500 (calibrated so typical Django/Next.js projects don't trip the guard; small CLI tools and libraries are well under), ask the user via `AskUserQuestion` whether to:
 - Proceed with full audit (slower).
 - Limit to recently-changed directories (last 7 days, via `git log --since='7 days ago' --name-only`).
 - Accept a user-supplied subdirectory list.
