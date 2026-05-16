@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-05-16
+
+Two new workflow skills targeting the highest-frequency repeated prompts surfaced from 30 days of session history: project onboarding and cross-repo branch hygiene.
+
+### Added
+- `project-onboarding` skill. Fires when the user opens a session with "familiarize yourself with X", "you'll be working out of the X project", or similar. Reads the workspace project map, per-project CLAUDE.md / AGENTS.md / Context Matrix, manifest file, settings module, and recent git state, then surfaces only the project-specific rules that actually apply (Render API gotchas for Render projects, dropship `tracked=false` for autolab, Linear-not-GitHub for TheCTIAgent, PS 5.1-vs-7 for pitt-skills, etc.).
+- `branch-hygiene` skill. Cross-branch sweep: categorizes every local branch (Protected / Gone / Merged / OpenPR / StaleUnmerged / Active), presents a plan, deletes safe-to-delete after per-category approval, fast-forwards long-lived branches from upstream, cleans orphaned worktrees, and surfaces stale PRs with mergeability state. Complements `commit-commands:clean_gone` (which is scoped to `[gone]` refs only) and `finishing-a-development-branch` (which handles a single branch's end-of-life).
+
+### Changed
+- `plugin.json` version bumped 1.13.0 → 1.14.0 (plus the two hardcoded mirrors in `scripts/build.ps1` and `tests/build/fixtures/`).
+
 ## [1.8.1] - 2026-05-04
 
 `compact-memory` setup scripts now handle the default Claude Code `MEMORY.md` format.
