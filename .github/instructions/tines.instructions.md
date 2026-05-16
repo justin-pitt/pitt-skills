@@ -141,6 +141,8 @@ Centralized, team-scoped data store for plaintext, JSON, or files (5MB limit per
 
 Use Cases when humans need to investigate. Use Records when Stories need to read/write structured state.
 
+**Tier gate:** `/api/v2/cases*` is paid-tier only. CE returns `401 "tenant does not have access"`. For CE-compatible case-style state, back it with Records and surface the analyst view via Pages. See `references/gotchas.md` #20.
+
 ## Pages
 
 In-platform web pages built into the Storyboard. Used for:
