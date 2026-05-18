@@ -2,9 +2,12 @@
 name: vibesec
 description: This skill helps Claude write secure web applications. Use this when working on any web application or when a user requests a scan or audit to ensure security best practices are followed.
 license: Apache-2.0
+user-invocable: false
 ---
 
 # Secure Coding Guide for Web Applications
+
+> **Companion skill:** `owasp-security` is the standards-mapping reference (OWASP Top 10:2025, ASVS 5.0, Agentic Top 10 2026). Use **vibesec** for hands-on secure-coding patterns and reviewer-style checklists; use **owasp-security** when you need standards traceability or a 2025/2026 catalog of categories. They are intentionally complementary, not duplicates — do not copy guidance between them.
 
 ## Overview
 

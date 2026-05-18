@@ -5,6 +5,8 @@ description: This skill helps Claude write secure web applications. Use this whe
 
 # Secure Coding Guide for Web Applications
 
+> **Companion skill:** `owasp-security` is the standards-mapping reference (OWASP Top 10:2025, ASVS 5.0, Agentic Top 10 2026). Use **vibesec** for hands-on secure-coding patterns and reviewer-style checklists; use **owasp-security** when you need standards traceability or a 2025/2026 catalog of categories. They are intentionally complementary, not duplicates — do not copy guidance between them.
+
 ## Overview
 
 This guide provides comprehensive secure coding practices for web applications. As an AI assistant, your role is to approach code from a **bug hunter's perspective** and make applications **as secure as possible** without breaking functionality.

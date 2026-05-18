@@ -17,60 +17,40 @@ Git worktrees create isolated workspaces sharing the same repository, allowing w
 
 Follow this priority order:
 
-### 1. Check Existing Directories
+### 1-3. Run the preflight script
 
 ```bash
-# Check in priority order
-ls -d .worktrees 2>/dev/null     # Preferred (hidden)
-ls -d worktrees 2>/dev/null      # Alternative
+bash scripts/worktree-preflight.sh
+# add --json for machine-readable output
 ```
 
-**If found:** Use that directory. If both exist, `.worktrees` wins.
+The script:
 
-### 2. Check CLAUDE.md
+- Detects `.worktrees/` then `worktrees/` (`.worktrees` wins when both exist)
+- Greps `CLAUDE.md` for a worktree-directory preference
+- Reports `gitignored: true|false` for the chosen project-local directory
+- Falls back to `~/.config/superpowers/worktrees/<project>` and emits `chosen: ask` so you know to ask the user
+- Returns repo root, project basename, and the recommended branch path scheme — all in one call
 
-```bash
-grep -i "worktree.*director" CLAUDE.md 2>/dev/null
-```
+Decision matrix on the script's output:
 
-**If preference specified:** Use it without asking.
-
-### 3. Ask User
-
-If no directory exists and no CLAUDE.md preference:
-
-```
-No worktree directory found. Where should I create worktrees?
-
-1. .worktrees/ (project-local, hidden)
-2. ~/.config/superpowers/worktrees/<project-name>/ (global location)
-
-Which would you prefer?
-```
+| Script output | What you do |
+|---|---|
+| `chosen: .worktrees` or `worktrees`, `gitignored: true` | Proceed straight to creation |
+| `chosen: <project-local>`, `gitignored: false` | Add to `.gitignore`, commit, then proceed |
+| `chosen: ask` | Ask user: project-local vs `~/.config/superpowers/worktrees/<project>/` |
 
 ## Safety Verification
 
-### For Project-Local Directories (.worktrees or worktrees)
+For project-local directories the preflight script already returned `gitignored: true|false`. If `false`, follow Jesse's rule "Fix broken things immediately":
 
-**MUST verify directory is ignored before creating worktree:**
-
-```bash
-# Check if directory is ignored (respects local, global, and system gitignore)
-git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
-```
-
-**If NOT ignored:**
-
-Per Jesse's rule "Fix broken things immediately":
 1. Add appropriate line to .gitignore
 2. Commit the change
 3. Proceed with worktree creation
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
 
-### For Global Directory (~/.config/superpowers/worktrees)
-
-No .gitignore verification needed - outside project entirely.
+For the global directory (`~/.config/superpowers/worktrees`) no gitignore verification is needed — it's outside the project.
 
 ## Creation Steps
 
@@ -100,22 +80,12 @@ cd "$path"
 
 ### 3. Run Project Setup
 
-Auto-detect and run appropriate setup:
-
 ```bash
-# Node.js
-if [ -f package.json ]; then npm install; fi
-
-# Rust
-if [ -f Cargo.toml ]; then cargo build; fi
-
-# Python
-if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-if [ -f pyproject.toml ]; then poetry install; fi
-
-# Go
-if [ -f go.mod ]; then go mod download; fi
+bash scripts/run-project-deps.sh
+# pass --dry-run to print the detected commands without executing
 ```
+
+Detects `package.json` (npm/pnpm/yarn/bun via lockfile), `Cargo.toml`, `requirements.txt`, `pyproject.toml` (poetry / pip / uv), `go.mod`, `Gemfile`, and `composer.json`, and runs the appropriate install command for each. Skip steps the script reports as "not detected" — don't manually substitute different commands.
 
 ### 4. Verify Clean Baseline
 

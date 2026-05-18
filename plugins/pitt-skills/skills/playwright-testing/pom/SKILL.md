@@ -1,6 +1,7 @@
 ---
 name: playwright-pom
 description: Page Object Model patterns for Playwright — when to use POM, how to structure page objects, and when fixtures or helpers are a better fit.
+user-invocable: false
 ---
 
 # Playwright Page Object Model

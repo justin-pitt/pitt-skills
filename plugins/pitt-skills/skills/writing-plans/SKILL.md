@@ -43,6 +43,8 @@ This structure informs the task decomposition. Each task should produce self-con
 - "Run the tests and make sure they pass" - step
 - "Commit" - step
 
+**REQUIRED SUB-SKILL:** `test-driven-development` defines the RED-GREEN-REFACTOR cycle these steps reproduce. Plan tasks should reference TDD rather than restating its loop in prose; cite "per `test-driven-development`" once per task instead.
+
 ## Plan Document Header
 
 **Every plan MUST start with this header:**
@@ -126,7 +128,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **1. Spec coverage:** Skim each section/requirement in the spec. Can you point to a task that implements it? List any gaps.
 
-**2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
+**2. Placeholder scan:** Run `scripts/scan-plan-placeholders.py docs/superpowers/plans/<filename>.md`. The script greps for `TBD`, `TODO`, `FIXME`, `XXX`, `???`, `<placeholder>`, `<fill-in>`, "implement later", "figure out", "decide later", and trailing-ellipsis headings. Fix every hit before handoff. Add `--strict` to make it exit non-zero on any hit (useful in CI).
 
 **3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 

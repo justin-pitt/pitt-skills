@@ -603,9 +603,7 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 - [ ] Identify patterns in rationalizations/failures
 
 **GREEN Phase - Write Minimal Skill:**
-- [ ] Name uses only letters, numbers, hyphens (no parentheses/special chars)
-- [ ] YAML frontmatter with required `name` and `description` fields (max 1024 chars; see [spec](https://agentskills.io/specification))
-- [ ] Description starts with "Use when..." and includes specific triggers/symptoms
+- [ ] Run `scripts/validate-skill-frontmatter.py path/to/SKILL.md` — enforces name regex, name ↔ parent-dir match, description present + "Use when ..." prefix, frontmatter ≤ 1024 chars, valid booleans for `disable-model-invocation` / `user-invocable`. Treat any output as a violation list to fix.
 - [ ] Description written in third person
 - [ ] Keywords throughout for search (errors, symptoms, tools)
 - [ ] Clear overview with core principle

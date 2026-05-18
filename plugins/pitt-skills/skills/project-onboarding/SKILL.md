@@ -63,14 +63,7 @@ You're looking for: language version, framework version, key dependencies, deplo
 
 ### Step 4 — Read recent git state
 
-Run in parallel:
-
-```bash
-git branch --show-current
-git status --porcelain
-git log --oneline -10
-git branch -vv | head -20
-```
+Run `scripts/git-onboarding-snapshot.sh` (or `--json`) — it bundles the standard `branch --show-current` / `status --porcelain` / `log --oneline -10` / `branch -vv | head -20` quad with section headers.
 
 Capture: current branch, dirty/clean, last ~10 commits (who's working on what), how many local branches exist, whether any are tracking gone remotes.
 

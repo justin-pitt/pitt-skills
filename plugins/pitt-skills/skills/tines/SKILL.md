@@ -2,6 +2,7 @@
 name: tines
 description: Tines is a no-code automation and orchestration platform commonly used as a SOAR replacement, IT automation engine, and workflow builder. Use this skill whenever the user mentions Tines, Tines stories, actions, the AI Agent action, Story copilot, Webhook actions, HTTP Request actions, Event Transform, Send to Story, Resources, Pages, Cases, Records, credentials, Connect Flows, formulas, pills (`<<slug.body.field>>` syntax), the Tines API, the Tines Terraform provider, tenants, change control, self-hosted Tines, Helm charts for Tines, Tines Tunnel, Command-over-HTTP, Tines on Azure or AWS, Tines credits and the AI credit pool, the Workbench, MCP server templates exposed by Tines, or any automation or workflow build inside Tines. Also trigger when the user asks about migrating from Cortex XSOAR / XSIAM or other SOAR platforms to Tines, designing playbook or story patterns, integrating security tools through Tines, building forms with Pages, running case management in Tines, or is debugging a Tines workflow, even if they don't name a specific Tines concept.
 license: MIT
+user-invocable: false
 ---
 
 # Tines Skill

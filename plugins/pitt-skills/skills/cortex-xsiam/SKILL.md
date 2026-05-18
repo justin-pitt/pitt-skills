@@ -18,6 +18,7 @@ description: >
   threat, ASM, endpoint protection, engines, tenant administration, and
   operational best practices.
 license: MIT
+user-invocable: false
 ---
 
 # Cortex XSIAM Skill

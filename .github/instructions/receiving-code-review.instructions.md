@@ -11,6 +11,8 @@ Code review requires technical evaluation, not emotional performance.
 
 **Core principle:** Verify before implementing. Ask before assuming. Technical correctness over social comfort.
 
+> **Canonical reference:** the *act* of running tests / commands / scripts to confirm a fix works lives in `verification-before-completion`. When this skill says "verify the suggestion", "test each fix individually", or "verify no regressions", invoke that skill — don't restate its evidence-before-assertions loop.
+
 ## The Response Pattern
 
 ```

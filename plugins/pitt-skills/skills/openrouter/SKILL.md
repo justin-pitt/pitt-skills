@@ -2,6 +2,7 @@
 name: openrouter
 description: OpenRouter API - Unified access to 400+ AI models through one API
 license: MIT
+user-invocable: false
 ---
 
 # OpenRouter Skill

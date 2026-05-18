@@ -2,6 +2,7 @@
 name: branch-hygiene
 description: Use when the user wants to clean up, audit, or sync a repo's branches across the board — not just one branch. Triggers on phrases like "cleanup branches", "delete merged branches", "branch audit", "fast-forward justins-branch and staging", "prune", "I have N branches, clean them up", "what's the state of the branches", or any request to sweep stale/merged/gone refs and bring long-lived branches up to date. Categorizes every local branch (merged, gone-tracking, stale-unmerged, long-lived, active), presents a plan, executes after approval, cleans associated worktrees, and surfaces stale open PRs. Do NOT use for: ending the life of ONE branch (use finishing-a-development-branch), deleting only [gone]-marked branches (commit-commands:clean_gone already does that one cleanly), or any push-force operation.
 license: MIT
+disable-model-invocation: true
 ---
 
 # Branch hygiene
@@ -48,16 +49,7 @@ If `--ff-only` fails (the local branch has diverged), STOP and report — don't 
 
 ### Step 2 — Inventory
 
-Gather, in parallel:
-
-```bash
-git branch --format='%(refname:short) %(upstream:track) %(committerdate:iso8601)'
-git branch -r --format='%(refname:short)'
-git worktree list
-gh pr list --state open --json number,headRefName,baseRefName,mergeable,updatedAt 2>/dev/null
-```
-
-The `gh pr list` may fail (no GitHub remote, `gh` not installed). If it does, note that PR data is unavailable and continue — the local categorization still works.
+Run `scripts/collect-branch-facts.sh` (or `--json` for parseable output) to capture default branch, locals with upstream-track + committerdate, remotes, worktrees, and `gh pr list` JSON in one shot. The script tolerates `gh` failures (no GitHub remote / `gh` not on PATH) — PR data is omitted, the rest still works.
 
 ### Step 3 — Categorize every local branch
 
@@ -81,13 +73,7 @@ justins-branch, justins-desktop, release, stable
 
 If a Protected branch is behind its upstream (e.g., `staging` is 7 commits behind `origin/staging`, or `justins-branch` is 12 commits behind `origin/main`), add it to a "fast-forward candidates" list to confirm in Step 4.
 
-**Default branch detection:**
-
-```bash
-git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@'
-```
-
-Fall back to `main`, then `master`, if the symbolic ref is missing.
+**Default branch detection** is included in `scripts/collect-branch-facts.sh` (the `default branch` section). It tries `git symbolic-ref refs/remotes/origin/HEAD`, then falls back to `main`, then `master`.
 
 ### Step 4 — Present the plan and get approval
 

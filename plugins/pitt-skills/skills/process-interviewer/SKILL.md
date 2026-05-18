@@ -87,7 +87,7 @@ Then ask: "What did I get wrong? What's missing?" This almost always surfaces 1-
 
 Based on whether the user wants a skill or just a plan:
 
-**If building a skill:** Read `references/skill-output-template.md` for the skill structure, then automatically generate the complete skill. Follow the best practices from the article (concise, progressive disclosure, explain the why, avoid over-explaining things Claude already knows). Create the SKILL.md and any necessary reference files. Save them to the workspace.
+**If building a skill:** Hand off to the `writing-skills` skill — that is the canonical place where skill structure, frontmatter rules, progressive-disclosure guidance, and the SKILL.md template live (and where `scripts/validate-skill-frontmatter.py` enforces them). Pass the captured GOAL / INPUT / PROCESS / OUTPUT / EDGE CASES summary into that skill instead of duplicating its template logic here. The `references/skill-output-template.md` file in this folder remains as a quick-reference shape only — it must not drift from `writing-skills`.
 
 **If just planning:** Read `references/plan-output-template.md` and produce a detailed plan document. Save it to the workspace.
 

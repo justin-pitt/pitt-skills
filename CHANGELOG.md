@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-05-17
+
+Skill-pack-wide audit pass: visibility, deterministic-vs-judgment split, and composability cleanup.
+
+### Added
+- Deterministic helper scripts pulled out of skill prose (same result every run, zero token cost):
+  - `branch-hygiene/scripts/collect-branch-facts.sh` — local branches, remote/upstream, worktrees, open PRs in one shot.
+  - `codebase-audit/scripts/project-inventory.py` — file-extension histogram, file/dir counts, manifest detection.
+  - `project-onboarding/scripts/git-onboarding-snapshot.sh` — bundled `git status`/`branch -vv`/`log` snapshot.
+  - `writing-skills/scripts/validate-skill-frontmatter.py` — strict SKILL.md frontmatter validator.
+  - `writing-plans/scripts/scan-plan-placeholders.py` — flags `TODO`/`<placeholder>`/`FIXME` style gaps.
+  - `subagent-driven-development/scripts/extract-plan-tasks.py` — parses plan files into `{title,status,body,files}` JSON.
+  - `file-organizer/scripts/dir-inventory.sh` and `duplicate-hashes.sh` — directory inventory and SHA-256 duplicate finder.
+  - `compact-memory/scripts/encode-memory-dir.sh` and `encode-memory-dir.ps1` — workspace-path → memory-dir encoder.
+  - `using-git-worktrees/scripts/worktree-preflight.sh` and `run-project-deps.sh` — worktree directory + gitignore check, multi-stack dependency installer.
+  - `requesting-code-review/scripts/review-range-shas.sh` — picks `BASE_SHA`/`HEAD_SHA` against `origin/main` (fallback `origin/master`, then `HEAD~1`) and exports changed-file list.
+
+### Changed
+- Visibility hardening:
+  - `disable-model-invocation: true` on high-side-effect skills: `finishing-a-development-branch`, `branch-hygiene`, `agent-browser`, `playwright-testing/playwright-cli`. They are still `/run`-able by the user but Claude no longer auto-fires them.
+  - `user-invocable: false` on pure-knowledge / context skills (16 total) so they don't clutter the `/` menu but still feed context: `cortex-xsiam`, `tines`, `tufin`, `threatconnect`, `openrouter`, `owasp-security`, `vibesec`, `shopify-autolab` (workspace-level), `using-superpowers`, `verification-before-completion`, `find-skills`, parent `playwright-testing` and its `core`, `ci`, `migration`, `pom` sub-indexes.
+  - `brainstorming` Step 6 + the line-115 follow-up edited to **stop auto-committing the design doc**. The skill now writes the doc, reports the path, and asks the user before any commit. Keeps the skill auto-invocable while removing its only high-risk side effect.
+- Deterministic-vs-judgment split. The 10 SKILL.md bodies that previously dictated specific shell pipelines now call the new scripts above and reserve prose for the steps that actually need judgment: `branch-hygiene`, `codebase-audit`, `project-onboarding`, `writing-skills`, `writing-plans`, `subagent-driven-development`, `file-organizer`, `compact-memory`, `using-git-worktrees`, `requesting-code-review`.
+- Composability cleanup (no behavior change, just less drift surface):
+  - `oiloil-ui-ux-guide` (workspace) collapsed to a small redirect pointing at the canonical `ui-ux-guide` in this plugin.
+  - `playwright-testing/core/SKILL.md` collapsed to a stub redirect to the parent index (`disable-model-invocation: true`, `user-invocable: false`); reference markdown files in `core/` unchanged.
+  - `process-interviewer` Phase 5 now hands off to `writing-skills` instead of restating skill structure.
+  - `vibesec` and `owasp-security` both gained an explicit "companion skill, do not duplicate text" header so they stop drifting toward each other.
+  - `finishing-a-development-branch` Step 1 and `receiving-code-review` overview now defer to `verification-before-completion` for the "actually run the test command and check the output" loop.
+- `plugin.json` version bumped 1.14.0 → 1.15.0 (plus the two hardcoded mirrors in `scripts/build.ps1` and `tests/build/fixtures/`).
+
 ## [1.14.0] - 2026-05-16
 
 Two new workflow skills targeting the highest-frequency repeated prompts surfaced from 30 days of session history: project onboarding and cross-repo branch hygiene.
