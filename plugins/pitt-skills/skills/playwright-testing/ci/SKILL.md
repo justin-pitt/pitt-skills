@@ -1,6 +1,7 @@
 ---
 name: playwright-ci
 description: Production-ready CI/CD configurations for Playwright — GitHub Actions, GitLab CI, CircleCI, Azure DevOps, Jenkins, Docker, parallel sharding, reporting, code coverage, and global setup/teardown.
+user-invocable: false
 ---
 
 # Playwright CI/CD

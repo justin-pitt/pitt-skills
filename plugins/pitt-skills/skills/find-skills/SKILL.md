@@ -8,6 +8,7 @@ metadata:
   author: vercel-labs
   version: 1.0.0
   source: vercel-labs/skills//skills/find-skills
+user-invocable: false
 ---
 
 # Find Skills

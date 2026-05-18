@@ -28,18 +28,16 @@ Run these 8 steps in order. Each step is mandatory. Use `TodoWrite` to track pro
 
 ### Step 1 — Detect project context
 
-Capture:
+Run `scripts/project-inventory.py` (use `--json` for machine-readable output) to capture languages (extension histogram), detected manifests, and total filtered file count in one call. The script already skips `.git/`, `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/`, `.next/`, `target/`. Then add:
+
 - Project root (current working directory unless the user specified another).
-- Languages present, inferred from file extensions via `Glob` (e.g., `**/*.py`, `**/*.ts`, `**/*.tsx`, `**/*.go`).
-- Frameworks present, inferred from manifest files: `package.json`, `pyproject.toml`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`.
-- Git state: current branch and dirty/clean.
-- Rough file count: use the `Glob` tool with pattern `**/*` then count results. Skip files under `.git/`, `node_modules/`, `__pycache__/`, `.venv/`, `dist/`, `build/` to keep the count meaningful.
+- Git state: current branch and dirty/clean (use `project-onboarding/scripts/git-onboarding-snapshot.sh` if you also want recent log).
 
 ### Step 2 — Huge-repo guard
 
-If file count > 1500 (calibrated so typical Django/Next.js projects don't trip the guard; small CLI tools and libraries are well under), ask the user via `AskUserQuestion` whether to:
+If `total_files` from Step 1 > 1500 (calibrated so typical Django/Next.js projects don't trip the guard; small CLI tools and libraries are well under), ask the user via `AskUserQuestion` whether to:
 - Proceed with full audit (slower).
-- Limit to recently-changed directories (last 7 days, via `git log --since='7 days ago' --name-only`).
+- Limit to recently-changed directories (last 7 days, via `git log --since='7 days ago' --name-only | sort -u`).
 - Accept a user-supplied subdirectory list.
 
 ### Step 3 — Dispatch 4 parallel Sonnet subagents

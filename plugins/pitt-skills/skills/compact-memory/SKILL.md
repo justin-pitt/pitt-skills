@@ -81,7 +81,17 @@ If you already have other entries under `"hooks"`, only add the `PreCompact` arr
 
 **Edit 3.** For each project workspace where you want compaction snapshots, add an index entry to that workspace's auto-memory `MEMORY.md`.
 
-The path is `~/.claude/projects/<encoded-workspace-path>/memory/MEMORY.md`. The encoding rule: drop the drive letter prefix, replace `:` and `/` and `\` with `-`, preserve case. Examples:
+The path is `~/.claude/projects/<encoded-workspace-path>/memory/MEMORY.md`. To compute it deterministically, run one of:
+
+```bash
+bash <skill-dir>/scripts/encode-memory-dir.sh "/path/to/workspace"
+```
+
+```powershell
+& "<skill-dir>/scripts/encode-memory-dir.ps1" "C:\path\to\workspace"
+```
+
+Both print the encoded folder name (e.g. `c--Code` or `-home-justin-code`). The hand-rule, for reference: drop the drive-letter colon prefix, replace `:` and `/` and `\` with `-`, preserve case. Examples:
 
 | Workspace | Encoded path |
 |---|---|

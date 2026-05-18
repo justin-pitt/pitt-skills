@@ -17,12 +17,7 @@ Guide completion of development work by presenting clear options and handling ch
 
 ### Step 1: Verify Tests
 
-**Before presenting options, verify tests pass:**
-
-```bash
-# Run project's test suite
-npm test / cargo test / pytest / go test ./...
-```
+**Before presenting options, run the project's test suite per the canonical `verification-before-completion` skill** — that skill defines what "evidence before assertions" means, including which command to run, what output to capture, and how to handle partial failures. Don't restate that loop here; invoke it.
 
 **If tests fail:**
 ```

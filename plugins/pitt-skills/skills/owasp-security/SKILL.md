@@ -2,11 +2,14 @@
 name: owasp-security
 description: OWASP Security Best Practices 2025-2026 — comprehensive guide to OWASP Top 10:2025, ASVS 5.0.0, and OWASP Top 10 for Agentic Applications 2026. Use when reviewing code for security vulnerabilities, implementing authentication/authorization, handling user input, or discussing web application security standards.
 license: MIT
+user-invocable: false
 ---
 
 # OWASP Security Best Practices 2025-2026
 
 A comprehensive guide to the latest OWASP security standards for developers building secure applications.
+
+> **Companion skill:** `vibesec` is the hands-on secure-coding playbook (concrete patterns, reviewer-style checklists, framework guidance). Use **owasp-security** when you need standards traceability or category-by-category reference for OWASP Top 10:2025, ASVS 5.0, or the 2026 Agentic Top 10; use **vibesec** when you need to actually fix or harden code. The two skills are intentionally complementary — do not copy category text between them.
 
 ---
 

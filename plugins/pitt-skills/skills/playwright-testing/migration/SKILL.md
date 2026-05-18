@@ -1,6 +1,7 @@
 ---
 name: playwright-migration
 description: Step-by-step migration guides for moving to Playwright from Cypress or Selenium/WebDriver — command mappings, architecture changes, and incremental adoption strategies.
+user-invocable: false
 ---
 
 # Playwright Migration Guides

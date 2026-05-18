@@ -2,6 +2,7 @@
 name: tufin
 description: Use whenever the user mentions Tufin, TOS, SecureTrack, SecureChange, SecureApp, USP, TQL, Tufin REST or GraphQL API, Designer, Verifier, access requests, policy violations, zone matrices, network zones, firewall rule cleanup, rule recertification, decommission tickets, topology map, path analysis, OPM agents, TufinMate, Workflow Integrator, or any policy-management or change-automation task involving Tufin. Also trigger when the user wants to write Tufin REST/GraphQL calls, build or modify SecureChange workflows, write TQL queries, design SOAR playbooks that pull policy or topology data from SecureTrack, automate access-request submission, integrate Tufin with ITSM (ServiceNow), SOAR (XSOAR, Tines, Torq), or SIEM, or integrate Tufin into M&A network onboarding. CDW currently runs TOS Aurora R25-1 PHF3.
 license: MIT
+user-invocable: false
 ---
 
 # Tufin Orchestration Suite (TOS) Aurora

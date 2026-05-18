@@ -80,20 +80,7 @@ When a user requests file organization help:
 
 2. **Analyze Current State**
    
-   Review the target directory:
-   ```bash
-   # Get overview of current structure
-   ls -la [target_directory]
-   
-   # Check file types and sizes
-   find [target_directory] -type f -exec file {} \; | head -20
-   
-   # Identify largest files
-   du -sh [target_directory]/* | sort -rh | head -20
-   
-   # Count file types
-   find [target_directory] -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn
-   ```
+   Run `scripts/dir-inventory.sh [target_directory]` (add `--top 30` to expand the largest-files section). It captures total file/dir counts, total bytes, type breakdown via `file(1)` (image / video / audio / text / archive / executable / other), the top-N largest files, and the 5 most/least recently modified files in one pass.
    
    Summarize findings:
    - Total files and folders
@@ -129,17 +116,7 @@ When a user requests file organization help:
 
 4. **Find Duplicates**
    
-   When requested, search for duplicates:
-   ```bash
-   # Find exact duplicates by hash
-   find [directory] -type f -exec md5 {} \; | sort | uniq -d
-   
-   # Find files with same name
-   find [directory] -type f -printf '%f\n' | sort | uniq -d
-   
-   # Find similar-sized files
-   find [directory] -type f -printf '%s %p\n' | sort -n
-   ```
+   Run `scripts/duplicate-hashes.sh [directory]` (use `--json` for parseable output, or `--max-bytes 50000000` to skip huge files). It groups files by SHA-256 hash and surfaces wasted bytes per group.
    
    For each set of duplicates:
    - Show all file paths

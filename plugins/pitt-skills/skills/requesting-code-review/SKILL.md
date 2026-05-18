@@ -25,10 +25,13 @@ Dispatch superpowers:code-reviewer subagent to catch issues before they cascade.
 ## How to Request
 
 **1. Get git SHAs:**
+
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
-HEAD_SHA=$(git rev-parse HEAD)
+eval "$(bash scripts/review-range-shas.sh)"
+# now $BASE_SHA, $HEAD_SHA, $BASE_REF, $CHANGED_FILES are exported
 ```
+
+The script picks the right base automatically: `origin/main` (or `origin/master`) when present, falling back to `HEAD~1`. Pass an explicit base when you want one — e.g. `bash scripts/review-range-shas.sh origin/develop` — or `--json` for parseable output.
 
 **2. Dispatch code-reviewer subagent:**
 
@@ -54,8 +57,7 @@ Use Task tool with superpowers:code-reviewer type, fill template at `code-review
 
 You: Let me request code review before proceeding.
 
-BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
-HEAD_SHA=$(git rev-parse HEAD)
+eval "$(bash scripts/review-range-shas.sh)"
 
 [Dispatch superpowers:code-reviewer subagent]
   WHAT_WAS_IMPLEMENTED: Verification and repair functions for conversation index

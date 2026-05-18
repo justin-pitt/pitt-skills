@@ -2,6 +2,7 @@
 name: threatconnect
 description: "ThreatConnect TIP and Polarity overlay expert. Use for any task involving ThreatConnect or Polarity: REST API calls (v2/v3), authentication (Token/HMAC), TQL queries, Indicators, Groups, Cases, Workflow, Tags, Security Labels, Associations, ThreatAssess scoring, CAL configuration, indicator deprecation, exclusion lists, TAXII feeds (inbound/outbound), feed metrics, dashboards, Query Cards, Threat Graph, ATT&CK Visualizer, Risk Quantifier, Polarity integrations (Core, IOC Submission, Intel Search, CAL, XSOAR), Polarity custom development (Node.js), Polarity server administration, Playbooks, Components, Workflow Playbooks, App Builder, TcEx, indicator distribution to SIEM/SOAR (XSIAM, Sentinel, Splunk, Elastic, Tines, Torq, BlinkOps), HTTP errors, HMAC signature failures, indicator formatting (ASN, CIDR, Host, URL, Registry Key), or troubleshooting. Trigger even without explicit ThreatConnect/Polarity mention if the task involves threat intelligence platform operations."
 license: MIT
+user-invocable: false
 ---
 
 # ThreatConnect & Polarity Skill
