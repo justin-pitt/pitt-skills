@@ -61,11 +61,40 @@ If your prompt or URL references `<<foo.bar.baz>>` and `bar` doesn't exist, the 
 
 A pill as a **whole path segment** often passes validation: `.../users/<<x>>/profile`. A pill surrounded by other chars in the same segment sometimes gets "Invalid URL" rejected: `.../users/a-<<x>>-b`. Tines validates the URL before substituting pills; depending on where `<<...>>` sits, the raw template may or may not look URL-ish enough to pass validation.
 
+### 21. Pill `<<x.y.z>>` in a JSON payload value stringifies arrays and objects
+
+When a pill is the entire value of a JSON field in an action's `payload`, Tines emits the resolved value as a JSON **string**, not as the native type. If the pill resolves to an array, you get a quoted-string-containing-a-JSON-literal like `{"composite_ids": "[\"id1\",\"id2\"]"}` — and any downstream consumer that expects an array (CrowdStrike Alerts API, etc.) will reject the body.
+
+Use **formula syntax** (`=expr`, no angle brackets) for native-type substitution:
+
+```jsonc
+// WRONG — sends {"composite_ids": "[\"id1\"]"}, a string containing an array literal
+"payload": { "composite_ids": "<<query.body.resources>>" }
+
+// CORRECT — sends {"composite_ids": ["id1"]}, native array
+"payload": { "composite_ids": "=query.body.resources" }
+```
+
+Diagnose by reading the outbound log via `GET /api/v1/agents/{id}/logs` (gotcha #17) and inspecting the literal `body` field. If the value looks like a quoted JSON literal, this bug is yours. Cost ~30 min during the CS poller build before the pattern was identified.
+
+Pill is fine when the value is naturally a string (URL, single-string field, etc.). The trap is array/object/number/boolean passthrough.
+
+### 22. Pill `.length` on an array doesn't resolve in TriggerAgent paths
+
+`<<query.body.resources.length>>` in a TriggerAgent rule `path` resolves to nothing (or an unrelated internal value) — Tines doesn't honor JavaScript-style `.length` access. The Trigger silently logs `"Invalid Options"` errors and the chain stalls without an obvious cause.
+
+Workarounds:
+
+- Use a `regex` rule against the array literal: `type: "regex", value: "\\[.+\\]", path: "<<query.body.resources>>"`. Matches any non-empty array; `[]` fails to match.
+- Use a formula path: `path: "=SIZE(query.body.resources)"` paired with a numeric comparison rule type (verify the rule type is runtime-valid; see #23).
+
 ## API surprises
 
 ### 8. `links_to_sources` / `links_to_receivers` on PUT → adds, does not replace
 
 Updating an action's wiring via `PUT /api/v1/actions/{id}` with `links_to_sources: [...]` APPENDS to the existing links. Same for `links_to_receivers`. The legacy `source_ids`/`receiver_ids` fields don't reliably replace either. To change wiring cleanly, **delete and recreate the action**.
+
+Note: `links_to_receivers` is also the canonical write-side for **adding** a link. The shape on PUT is `[{"receiver_id": <int>, "link_type": "DEFAULT"}]` — both fields required; `link_type: "DEFAULT"` is the common value. The MCP `tines_update_action` tool does not expose this field, so programmatic wiring requires raw `PUT /api/v1/agents/{id}`.
 
 ### 9. Some doc paths are wrong; probe the live tenant
 
@@ -95,6 +124,8 @@ exit_agent_ids: [<id of the action whose emission is the "return value">]
 ```
 All four via `PUT /api/v1/stories/{id}`. Tines normalizes `send_to_story_access_source="TEAM"` into `send_to_story_access_source="STS"` + `send_to_story_access="TEAM"` on its side — idiosyncratic but harmless.
 
+**Caller side:** the SendToStoryAgent option key is `story` (singular, not `story_id`). Accepts either a numeric story ID (`109386`) or a pill like `<<STORY.cdw_target_slug>>`. The pill only resolves at runtime if the target has `send_to_story_enabled=true` — without that, the calling action errors with `"Couldn't find the target story."` even though the story exists and you can fetch it via the API. The misleading message points at the caller; the fix is on the target.
+
 ### 12. `SWITCH` formula requires an explicit default
 
 ```
@@ -108,6 +139,42 @@ SWITCH(type, "ip", "IPv4", "domain", "domain")
 ### 13. `FORMAT_DATE` doesn't exist as a formula function
 
 Name is different on Tines. `NOW()` returns an ISO 8601 string directly in most pill contexts — no formatting wrapper needed. If you need a specific format, experiment with variants (`DATE_FORMAT`, `STRFTIME`, etc.) or use string manipulation on `NOW()`'s output.
+
+### 23. Action option validators are lenient at create, strict at runtime
+
+`POST /api/v1/actions` (and the MCP `tines_create_action`) accepts options blocks that the runtime later rejects. The action lands in the story with no creation-time error; the chain only breaks when a real event arrives.
+
+Confirmed during the CS poller build: a TriggerAgent created with `{"rules": [{"type": "field_greater_than", "value": "0", "path": "..."}]}` returned 200 at create. Every cron tick then logged `"Invalid Options: Rule contains invalid type: 'field_greater_than'"` at runtime. The valid runtime type for that comparison turned out to be `regex` (matched against the array literal), not `field_greater_than`.
+
+Implications:
+
+- Don't trust a 200 from `tines_create_action` as proof the action will run.
+- After creating an action programmatically, fire one event through it (or read its logs after the first real trigger) before treating it as wired.
+- When stalled mid-chain with no visible event emission, fetch `GET /api/v1/agents/{id}/logs` (gotcha #17) — the runtime rejection message is there, not in the create response.
+
+### 24. Schedules attach to HTTPRequestAgent, not WebhookAgent; shape and minimum cadence
+
+The Tines UI does not expose an "Add schedule" affordance on `Agents::WebhookAgent`. Schedules must live on the first downstream `Agents::HTTPRequestAgent` (or another agent type that emits independently). A cron-driven poller chain is therefore `[scheduled HTTP Request] -> [Trigger] -> ...`, not `[Webhook with schedule] -> ...`.
+
+Shape on the agent object (and on `PUT /api/v1/agents/{id}`):
+
+```json
+"schedule": [
+  {"cron": "* * * * *", "timezone": "UTC"}
+]
+```
+
+Field name is `timezone` (one word), not `time_zone`. Tines stores `schedule` as an **array** of schedule objects (multiple schedules per agent are allowed). The MCP `tines_update_action` tool does not expose `schedule`; use raw REST.
+
+**Minimum cadence is 1 minute** (`* * * * *`), not 60 seconds, not 30 seconds. The Tines `whats-new` page documents this; sub-minute schedules are not accepted.
+
+If a plan says "Every 60 seconds" or "every N seconds where N<60", interpret as "every minute" and proceed.
+
+### 25. Action create requires the full `Agents::*` type names
+
+`tines_create_action` and `POST /api/v1/actions` reject short type names. `"WebhookAgent"` returns 422; `"Agents::WebhookAgent"` is required. Same for every other action type: `"Agents::HTTPRequestAgent"`, `"Agents::TriggerAgent"`, `"Agents::EventTransformationAgent"`, `"Agents::SendToStoryAgent"`, `"Agents::LLMAgent"`, etc.
+
+The `action_type` parameter description on the MCP tool implies short forms are valid (`"e.g. WebhookAgent, HTTPRequest"`). They are not. Always prefix with `Agents::`.
 
 ## Operational ceilings
 
