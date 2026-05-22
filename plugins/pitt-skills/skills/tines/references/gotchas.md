@@ -230,6 +230,131 @@ Practical implications:
 
 Confirmed on `lingering-waterfall-1781`. Scope case management early in any Tines build: the tier is the limiter, not the API design. See also gotcha #18 (the storyboard Events pane is not an analyst surface) — CE without Cases has no built-in analyst view, so external sinks (Pages, webhook.site, Slack) become load-bearing.
 
+### 26. String concat in a formula needs `JOIN`, not `CONCAT` or `+`
+
+Despite being documented under "string functions," `CONCAT` is **array-only** at runtime:
+
+```
+CONCAT("a","b","c")            → runtime error: "Invalid arguments to CONCAT, expected arrays"
+CONCAT(["a","b","c"])          → ["a","b","c"]   (returns the array, not "abc")
+```
+
+`+` is **number-only** and rejects text:
+
+```
+"a" + "b"                      → runtime error: "Could not convert object of type Text to a number.
+                                  The + operator only accepts Numbers or Text that can be converted to a number."
+```
+
+The correct primitive inside a formula is `JOIN(array, separator)`:
+
+```
+JOIN(["Bearer ", credential.token], "")           → "Bearer abc123"
+JOIN([vendor, external_id, "- awaiting"], " ")    → "proofpoint_trap inc-001 - awaiting"
+```
+
+Outside a formula (a top-level field value), just chain pills inline in plain text:
+
+```
+"description": "<<vendor>> <<external_id>> - awaiting enrichment"
+```
+
+`validate_story` does not catch the bad cases; same class as gotcha #23 (option validators lenient at create, strict at runtime). Surfaced during Case Operations Phase 4 rewrite on `lingering-waterfall-1781`: every op=open call crashed the moment Case Ops tried to build a fallback description via `CONCAT(vendor, " ", external_id, ...)`.
+
+### 27. `TriggerAgent` `must_match` accepts numeric strings only — `"all"` is rejected
+
+When wiring a `TriggerAgent` with multiple rules that all need to match (AND semantics), the natural-looking value is rejected:
+
+```
+options:
+  must_match: "all"          → runtime error: "Invalid Options: 'must_match' must be a number greater than 0"
+  rules: [...3 regex rules...]
+```
+
+The validator wants a numeric string equal to the rule count for AND, or `"1"` for OR. Set it to the rule count:
+
+```
+options:
+  must_match: "3"            → all 3 rules must match
+  must_match: "1"            → any 1 of the rules must match (OR)
+```
+
+`validate_story` does not catch it (runtime-only). Same class as gotchas #13 (`FORMAT_DATE` doesn't exist), #23 (option validators lenient at create, strict at runtime). Surfaced on the gap-1 TRAP auto-close Trigger on `lingering-waterfall-1781`: the Trigger silently never emitted because the options dict was rejected at runtime, no event ever flowed downstream to the auto-close branch.
+
+### 28. `HTTPRequestAgent`'s `log_error_on_status: []` masks API errors silently
+
+An empty `log_error_on_status` array silences all non-2xx logging. The action still emits its event with the API's response body in `.body` and the status code in `.status`, but the action's log feed shows no warning/error entry — only the "Sending request" info line. The next action downstream cannot tell the request failed unless it explicitly checks `.status`.
+
+Common false-success pattern: an HTTPRequestAgent appears to work because the log shows the request being sent, but the API actually 422'd or 404'd. The Tines UI's per-action log panel looks clean.
+
+Diagnose by inspecting the emitted event directly (`GET /api/v1/actions/{id}/events?limit=1`) and reading the `.body` field. If `.body` is an error envelope or a Rails-style array of strings like `["Validation failed: ..."]`, the API rejected the request even though the action's logs are quiet.
+
+Fix: configure `log_error_on_status` explicitly, e.g. `[400, 404, 409, 422, 500]`. Note that `tines_create_action` and direct API creates default to an empty array even when the UI default has values pre-populated.
+
+Surfaced on `lingering-waterfall-1781` during Case Operations Update + Close debugging (issue #24): the PATCH actions had been silently 422-ing for days because `sub_status_id` rendered to `""` from a broken pill (see #29) and `log_error_on_status: []` swallowed every rejection.
+
+### 29. Pill access to nested keys on a JSON-text `RESOURCE` may resolve to empty in payload contexts
+
+A resource stored as JSON-formatted text such as `{"in_triage": 464167, "pending_analyst": 464168}` supports dot-access pill syntax `<<RESOURCE.my_resource.in_triage>>`. In some contexts (specifically observed inside `Agents::HTTPRequestAgent` JSON-payload string slots), this resolves to empty string at evaluation time rather than the expected integer. The same resource and the same pill may work as expected in a Trigger `path` slot or an Event Transform `payload`.
+
+The action then ships the empty string. For an integer-typed API field like Cases v2 `sub_status_id`, the API rejects with HTTP 422 — silent unless `log_error_on_status` is set (see #28).
+
+Workarounds, in increasing order of robustness:
+
+1. **Hardcode the literal**: `"sub_status_id": 464168` (plain JSON integer) or `"sub_status_id": "=464168"` (formula).
+2. **Explicit JSON parse**: `"=JSON_PARSE(RESOURCE.my_resource).in_triage"` — typed; verify on the live tenant before relying on it.
+3. **Flat resource per key**: `RESOURCE.my_in_triage_id` instead of a nested-JSON lookup.
+
+Always **probe the rendered value via the emitted event before relying on a nested `RESOURCE` pill resolving correctly**. Sibling gotcha #29's general rule: pills resolve in some contexts and silently produce empty strings in others; the only reliable check is reading the action's emitted event.
+
+Observed against `lingering-waterfall-1781` during Case Operations sub-status wiring (issue #24). Whether this is a tenant-specific quirk or platform behavior is unconfirmed; the safe assumption is the latter.
+
+### 30. `=String(value)` is not a Tines formula function
+
+`String()` looks like a natural JavaScript-style scalar coercion, but Tines has no such function:
+
+```
+=String(receive.body.id)         → runtime error: "Undefined function String"
+```
+
+To get the string form of a value for use inside another formula or as a string slot, use:
+
+- **Plain pill** (auto-stringifies when placed in a JSON string context): `"<<receive.body.id>>"`
+- **JOIN single-element**: `=JOIN([receive.body.id], '')` returns the value coerced to text
+- **String-literal prefix concat**: `=JOIN(['', receive.body.id], '')` if you need to defeat type-preservation explicitly
+
+`validate_story` does not catch this; runtime-only. Sibling foot-guns: no `REGEX_MATCH`, no `CONTAINS`-for-arrays, `CONCAT` is array-only, no `FORMAT_DATE`. The mental model: assume any obvious-sounding global function from a mainstream language does not exist in Tines formulas until proven by a synthetic fire.
+
+Surfaced on `lingering-waterfall-1781` on the TRAP handler (issue #22 / PR #31).
+
+### 31. Cases v2 PATCH: `null` is no-change, `""` is destructive
+
+The `PATCH /api/v2/cases/{id}` endpoint draws a sharp distinction between JSON `null` and empty string for nullable fields:
+
+| Body value | Effect |
+|---|---|
+| `{"sub_status_id": 464168}` | Sets sub-status to that ID |
+| `{"sub_status_id": null}` | No change — current sub-status preserved |
+| `{"sub_status_id": ""}` | **HTTP 422 "No object ID provided"** |
+| `{"description": "new text"}` | Sets description |
+| `{"description": null}` | No change — current description preserved |
+| `{"description": ""}` | **Destructive** — sets description to empty string, logs a `DESCRIPTION_UPDATED` activity with empty value |
+
+The destructive behavior is dangerous in Tines because a common pattern is `<<DEFAULT(receive.body.fields.ai_summary, '')>>` — when the caller omits `ai_summary`, the pill renders to `""` and the PATCH wipes the existing description. Same shape applies to any nullable text field on the case.
+
+Canonical pattern: use **formula form with explicit null fallback** so JSON `null` reaches the API:
+
+```
+"description":   "=DEFAULT(receive.body.fields.ai_summary, null)"
+"sub_status_id": "=IF(IS_PRESENT(receive.body.fields.ai_verdict), 464168, null)"
+```
+
+Pair with gotcha #28 (silent error logging) — without `log_error_on_status` configured, the 422s on `sub_status_id: ""` are completely silent.
+
+Also note: the same endpoint's `metadata` object appears to be **replace-not-merge** on PATCH. Sending `{"metadata": {"new_key": "value"}}` against a case that already has `metadata: {"source": "x"}` does not merge; the new keys silently fail to land while the original is preserved. To update a single metadata key, read the case first, merge client-side, and PATCH the full merged object. Unconfirmed whether this is documented anywhere; observed empirically on `lingering-waterfall-1781`.
+
+Surfaced during issue #24 fix; confirmed via direct curl probes against `/api/v2/cases/{id}`.
+
 ---
 
 ## What to do when you hit an un-documented thing
