@@ -230,6 +230,57 @@ Practical implications:
 
 Confirmed on `lingering-waterfall-1781`. Scope case management early in any Tines build: the tier is the limiter, not the API design. See also gotcha #18 (the storyboard Events pane is not an analyst surface) — CE without Cases has no built-in analyst view, so external sinks (Pages, webhook.site, Slack) become load-bearing.
 
+### 26. String concat in a formula needs `JOIN`, not `CONCAT` or `+`
+
+Despite being documented under "string functions," `CONCAT` is **array-only** at runtime:
+
+```
+CONCAT("a","b","c")            → runtime error: "Invalid arguments to CONCAT, expected arrays"
+CONCAT(["a","b","c"])          → ["a","b","c"]   (returns the array, not "abc")
+```
+
+`+` is **number-only** and rejects text:
+
+```
+"a" + "b"                      → runtime error: "Could not convert object of type Text to a number.
+                                  The + operator only accepts Numbers or Text that can be converted to a number."
+```
+
+The correct primitive inside a formula is `JOIN(array, separator)`:
+
+```
+JOIN(["Bearer ", credential.token], "")           → "Bearer abc123"
+JOIN([vendor, external_id, "- awaiting"], " ")    → "proofpoint_trap inc-001 - awaiting"
+```
+
+Outside a formula (a top-level field value), just chain pills inline in plain text:
+
+```
+"description": "<<vendor>> <<external_id>> - awaiting enrichment"
+```
+
+`validate_story` does not catch the bad cases; same class as gotcha #23 (option validators lenient at create, strict at runtime). Surfaced during Case Operations Phase 4 rewrite on `lingering-waterfall-1781`: every op=open call crashed the moment Case Ops tried to build a fallback description via `CONCAT(vendor, " ", external_id, ...)`.
+
+### 27. `TriggerAgent` `must_match` accepts numeric strings only — `"all"` is rejected
+
+When wiring a `TriggerAgent` with multiple rules that all need to match (AND semantics), the natural-looking value is rejected:
+
+```
+options:
+  must_match: "all"          → runtime error: "Invalid Options: 'must_match' must be a number greater than 0"
+  rules: [...3 regex rules...]
+```
+
+The validator wants a numeric string equal to the rule count for AND, or `"1"` for OR. Set it to the rule count:
+
+```
+options:
+  must_match: "3"            → all 3 rules must match
+  must_match: "1"            → any 1 of the rules must match (OR)
+```
+
+`validate_story` does not catch it (runtime-only). Same class as gotchas #13 (`FORMAT_DATE` doesn't exist), #23 (option validators lenient at create, strict at runtime). Surfaced on the gap-1 TRAP auto-close Trigger on `lingering-waterfall-1781`: the Trigger silently never emitted because the options dict was rejected at runtime, no event ever flowed downstream to the auto-close branch.
+
 ---
 
 ## What to do when you hit an un-documented thing

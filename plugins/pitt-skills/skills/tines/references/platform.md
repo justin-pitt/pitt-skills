@@ -383,15 +383,15 @@ Tines uses pill expressions wrapped in double angle brackets `<<...>>` (similar 
 # JSON path
 <<JSONPATH(payload, "$.alerts[*].id")>>
 
-# Hash for dedup
-<<SHA256(CONCAT(user, host, date))>>
+# Hash for dedup (string concat needs JOIN; CONCAT is array-only at runtime)
+<<SHA256(JOIN([user, host, date], ""))>>
 
 # Token estimation before AI call
 <<ESTIMATED_TOKEN_COUNT(prompt_text)>>
 ```
 
 ### Operators
-Standard arithmetic (`+`, `-`, `*`, `/`), comparison (`==`, `!=`, `<`, `>`), logical (`&&`, `||`, `!`), string concatenation, array/object access (`.`, `[]`).
+Standard arithmetic (`+`, `-`, `*`, `/`), comparison (`==`, `!=`, `<`, `>`), logical (`&&`, `||`, `!`), array/object access (`.`, `[]`). **No infix string-concat operator** — `+` is number-only and rejects text. Use `JOIN(array, separator)` inside a formula or multiple pills inline in a plain text field (see formulas.md gotcha #8).
 
 ### Prompts
 The `PROMPT` formula function makes a single-shot LLM call inline. Use for: extraction, classification, simple summarization. Don't use for multi-turn or tool-use — use AI Agent action for that.

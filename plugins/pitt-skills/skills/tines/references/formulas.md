@@ -43,7 +43,6 @@ CAPITALIZE("hello world")  → "Hello world"
 STRIP("  hi  ")            → "hi"
 REPLACE(s, pattern, with)  → substitution (regex supported)
 SPLIT("a,b,c", ",")        → ["a","b","c"]
-CONCAT("a","b","c")        → "abc"
 SIZE("hello")              → 5
 CONTAINS(s, "abc")         → true/false
 URL_ENCODE(s), URL_DECODE(s)
@@ -148,8 +147,8 @@ OBJECT("user_hash", SHA256(DOWNCASE(STRIP(user.email))))
 # Compute time since an event in hours
 DATE_DIFF(PARSE_DATE(alert.timestamp, "%Y-%m-%dT%H:%M:%SZ"), NOW(), "hours")
 
-# Build an Authorization header
-CONCAT("Bearer ", credential.token)
+# Build an Authorization header (string concat needs JOIN — see gotcha #8 below)
+JOIN(["Bearer ", credential.token], "")
 ```
 
 ## Gotchas
@@ -161,6 +160,7 @@ CONCAT("Bearer ", credential.token)
 5. **Formulas don't short-circuit the way code does** — `IF(a, expensive_op_b, c)` evaluates all three arms. Watch for this with heavy network-backed pseudo-functions.
 6. **Array indices are 0-based**.
 7. **`WHERE` is shorthand for equality only** — for inequality or compound predicates, use `FILTER` with a `LAMBDA`.
+8. **String concat needs `JOIN`, not `CONCAT` or `+`.** `CONCAT` is array-only at runtime (`CONCAT(["a","b","c"])` → `["a","b","c"]`, not `"abc"`). Calling it with scalar string args errors with `Invalid arguments to CONCAT, expected arrays`. `+` is number-only and rejects text with `Could not convert object of type Text to a number`. The correct primitive inside a formula is `JOIN(array, separator)` — e.g. `JOIN(["Bearer ", credential.token], "")` or `JOIN([vendor, external_id], " ")`. Outside a formula (a top-level field value), chain pills inline in plain text: `"<<a>> <<b>>"`. `validate_story` does not catch the bad cases; the runtime is the only signal.
 
 ## Where to look things up
 
