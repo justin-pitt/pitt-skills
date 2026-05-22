@@ -44,10 +44,19 @@ STRIP("  hi  ")            → "hi"
 REPLACE(s, pattern, with)  → substitution (regex supported)
 SPLIT("a,b,c", ",")        → ["a","b","c"]
 SIZE("hello")              → 5
-CONTAINS(s, "abc")         → true/false
+CONTAINS(s, "abc")         → true/false    (substring only; rejects array args at runtime)
 URL_ENCODE(s), URL_DECODE(s)
 BASE64_ENCODE(s), BASE64_DECODE(s)
 ```
+
+**Functions that do NOT exist** (will error at runtime with `Undefined function ...`):
+
+- `String(x)` — use a plain pill `<<x>>` (auto-stringifies in a JSON string slot) or `JOIN([x], '')`.
+- `REGEX_MATCH(s, pattern)` — use `IS_PRESENT(REGEX_EXTRACT(s, pattern))` for a boolean test.
+- `CONTAINS(arr, value)` — `CONTAINS` is substring-only on strings. For array membership use `SIZE(FILTER(arr, LAMBDA(x, x == value))) > 0`, `WHERE(arr_of_objects, "field", value)`, or a `SWITCH` lookup against a known enum.
+- `FORMAT_DATE(d, fmt)` — `NOW()` and date values render as ISO 8601 directly in pills; no wrapper needed.
+
+`validate_story` does not catch any of these; they only fire at action-run time.
 
 ## Array functions
 
@@ -61,7 +70,10 @@ COMPACT(arr)                               # drop nulls/empties
 JOIN(["a","b","c"], ", ")                 → "a, b, c"
 
 FILTER(arr, LAMBDA(x, x > 5))             # functional filter
-MAP(arr, LAMBDA(x, x * 2))                # functional map
+MAP(arr, "field.subfield")                # dotted-path: extract one field per element (auto-flattens nested arrays one level)
+MAP_LAMBDA(arr, item.field)               # explicit per-item expression — `item` is the iterator name
+MAP(arr, LAMBDA(x, x * 2))                # LAMBDA form — docs-correct but rejected at runtime on at least one tenant
+                                          #   ("map: path should be a string, but it was an object"); prefer the two forms above
 WHERE(arr_of_objects, "field", value)     # shorthand filter by field equality
 ```
 
@@ -149,6 +161,11 @@ DATE_DIFF(PARSE_DATE(alert.timestamp, "%Y-%m-%dT%H:%M:%SZ"), NOW(), "hours")
 
 # Build an Authorization header (string concat needs JOIN — see gotcha #8 below)
 JOIN(["Bearer ", credential.token], "")
+
+# Cases v2 PATCH: null = no-change, '' = destructive (see gotchas #28, #31)
+# Use formula form with null fallback so the JSON null reaches the API.
+"description":   "=DEFAULT(receive.body.fields.ai_summary, null)"
+"sub_status_id": "=IF(IS_PRESENT(receive.body.fields.ai_verdict), 464168, null)"
 ```
 
 ## Gotchas
@@ -161,6 +178,9 @@ JOIN(["Bearer ", credential.token], "")
 6. **Array indices are 0-based**.
 7. **`WHERE` is shorthand for equality only** — for inequality or compound predicates, use `FILTER` with a `LAMBDA`.
 8. **String concat needs `JOIN`, not `CONCAT` or `+`.** `CONCAT` is array-only at runtime (`CONCAT(["a","b","c"])` → `["a","b","c"]`, not `"abc"`). Calling it with scalar string args errors with `Invalid arguments to CONCAT, expected arrays`. `+` is number-only and rejects text with `Could not convert object of type Text to a number`. The correct primitive inside a formula is `JOIN(array, separator)` — e.g. `JOIN(["Bearer ", credential.token], "")` or `JOIN([vendor, external_id], " ")`. Outside a formula (a top-level field value), chain pills inline in plain text: `"<<a>> <<b>>"`. `validate_story` does not catch the bad cases; the runtime is the only signal.
+9. **Functions that look like they should exist but don't:** `String(x)`, `REGEX_MATCH(s, pattern)`, `CONTAINS(arr, value)`, `FORMAT_DATE(d, fmt)`. See the "Functions that do NOT exist" block under String functions for the alternatives. All four error at runtime with `Undefined function ...`; `validate_story` does not catch them.
+10. **`MAP` has three forms; the LAMBDA form may be unreliable.** Prefer `MAP(arr, "dotted.path")` for plain field extraction or `MAP_LAMBDA(arr, item.expr)` for per-item expressions. The standard `MAP(arr, LAMBDA(x, expr))` form is docs-correct but has been observed to fail at runtime on at least one tenant (`map: path should be a string, but it was an object`). Probe before relying on it.
+11. **Cases v2 PATCH treats `null` and `""` very differently.** `null` is "no-change"; `""` either 422s (on integer-ID fields like `sub_status_id`) or destructively clears the field (on text fields like `description`). Pair this with gotcha #28 (silent error logging) and the common destructive Tines pattern `<<DEFAULT(..., '')>>` quietly wipes case fields. Use formula form `=DEFAULT(..., null)` instead. See the worked example above and gotcha #31 for the full behavior table.
 
 ## Where to look things up
 
