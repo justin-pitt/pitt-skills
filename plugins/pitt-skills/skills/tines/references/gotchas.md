@@ -351,9 +351,30 @@ Canonical pattern: use **formula form with explicit null fallback** so JSON `nul
 
 Pair with gotcha #28 (silent error logging) — without `log_error_on_status` configured, the 422s on `sub_status_id: ""` are completely silent.
 
-Also note: the same endpoint's `metadata` object appears to be **replace-not-merge** on PATCH. Sending `{"metadata": {"new_key": "value"}}` against a case that already has `metadata: {"source": "x"}` does not merge; the new keys silently fail to land while the original is preserved. To update a single metadata key, read the case first, merge client-side, and PATCH the full merged object. Unconfirmed whether this is documented anywhere; observed empirically on `lingering-waterfall-1781`.
+For the `metadata` object on a case, PATCH does not mutate it at all. See gotcha #32 for the dedicated `/cases/{id}/metadata` sub-endpoint that handles metadata mutation.
 
 Surfaced during issue #24 fix; confirmed via direct curl probes against `/api/v2/cases/{id}`.
+
+### 32. Cases v2 case `metadata` mutates only through `/cases/{id}/metadata`, not through `PATCH /cases/{id}`
+
+Initial discovery during PR #32 (issue #24) was that `PATCH /api/v2/cases/{id}` with a `metadata` field appeared to be "replace-not-merge." Follow-up probing during issue #34 / PR #38 corrected the picture: PATCH `/cases/{id}` ignores `metadata` **entirely**. So does PUT `/cases/{id}` with `metadata`. The mutation goes through a dedicated sub-endpoint.
+
+Behavior (empirical, against `lingering-waterfall-1781`):
+
+| call | body | result |
+|---|---|---|
+| `PATCH /cases/{id}` | `{"metadata": {...anything...}}` | 200, metadata unchanged |
+| `PUT /cases/{id}` | `{"metadata": {...anything...}}` | 200, metadata unchanged |
+| **`POST /cases/{id}/metadata`** | `{"metadata": {new_key: value}}` | **201, merged in (new keys only)** |
+| `POST /cases/{id}/metadata` | `{"metadata": {existing_key: value}}` | **409 "Metadata key X already exists"** |
+| **`PUT /cases/{id}/metadata`** | `{"metadata": {...}}` | **200, upsert: overwrites keys on collision, merges by default, never removes unmentioned keys** |
+| `PUT /cases/{id}/metadata` | `{"metadata": {}}` | 400 "Invalid metadata" |
+| `PATCH /cases/{id}/metadata` | (any) | 404 (endpoint does not exist) |
+| `DELETE /cases/{id}/metadata` | `{"keys": [...]}` or `{"metadata": {...}}` | 400 "Invalid metadata keys" (endpoint exists; correct body shape unknown) |
+
+Initial case creation `POST /cases` accepts an inline `metadata` object — that is the only context where the field on the parent resource lands.
+
+Canonical Tines wiring for "update metadata after creation": a separate `Agents::HTTPRequestAgent` doing `PUT /cases/{id}/metadata` with body `{"metadata": {key: value, ...}}`. POST is strict-insert which is rarely what you want once a case is in flight; PUT is the safe default. Reference impl: action 1489437 "Write close metadata" in Case Operations sub-story 109363 (shipped PR #38).
 
 ---
 
