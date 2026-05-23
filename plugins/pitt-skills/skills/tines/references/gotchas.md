@@ -424,6 +424,29 @@ Reference impl: PR #46 in tines-workspace replaces `CONCAT(MAP_LAMBDA(...), MAP_
 
 Surfaced during issues #15, #42, and #12.
 
+### 34. Native `Agents::CaseAgent` is Create-only; no Update / Close / Lookup / Comment action types exist
+
+`Agents::CaseAgent` exists and supports **Create Case only**. The other case operations have no native action type — they must remain HTTPRequest against `/api/v2/cases*`.
+
+API probe results (lingering-waterfall, 2026-05-23):
+
+| Type name tried | Result |
+|---|---|
+| `Agents::CaseAgent` | 201, Create Case |
+| `Agents::CaseUpdateAgent` / `Agents::UpdateCaseAgent` | 422 "Expected value to not be null" |
+| `Agents::CaseLookupAgent` / `Agents::CaseSearchAgent` | 422 |
+| `Agents::CaseCloseAgent` / `Agents::CloseCaseAgent` | 422 |
+| `Agents::CaseCommentAgent` / `Agents::CaseAddCommentAgent` / `Agents::AddCaseCommentAgent` | 422 |
+| `Agents::CaseOperationAgent` | 422 |
+
+`Agents::CaseAgent`'s options shape has two top-level keys: `case_details` (used) and `case_fields` (advertised in the default empty action but **silently dropped on input** — any value you POST is not persisted). Use `case_details` only. Typed custom field values must still flow through Pattern B per-field `POST /cases/{id}/fields` (gotcha #20 / [reference_tines_v2_cases_api_quirks](memory)).
+
+`case_details` is stored as an opaque JSON string and preserves arbitrary keys at write time (`metadata`, `external_id`, `sub_status_id`, `fields`, etc. all round-trip), but write-time preservation is not the same as runtime application — only the documented keys are known to be applied: `case_name`, `case_description`, `priority`, `closure_conditions`, `assignee_emails`, `tag_ids`, `record_ids`. Anything else needs separate API calls after create.
+
+**Practical implication:** a Case Operations sub-story with 5+ ops (lookup / open / update / close / add comment + per-field upsert) can convert at most the Open branch to native CaseAgent. Eight of nine HTTPRequest actions stay HTTPRequest. Probe before committing to a refactor — usually not worth the Change Control churn on a LIVE story.
+
+Surfaced during the issue #16 probe in tines-workspace (closed won't-do).
+
 ---
 
 ## What to do when you hit an un-documented thing
