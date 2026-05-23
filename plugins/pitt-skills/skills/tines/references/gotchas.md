@@ -357,6 +357,54 @@ Surfaced during issue #24 fix; confirmed via direct curl probes against `/api/v2
 
 ---
 
+### 32. `\b` word boundary in regex patterns silently doesn't work
+
+Inside a Tines formula's single-quoted string, the formula parser strips the single backslash on `\b`, leaving a literal `b` requirement that Ruby's regex engine interprets as such. `REGEX_EXTRACT(haystack, '\bhttps?://[^\s"<>]+\b')` searches for `bhttps?://...b` and matches nothing in normal text. `tines_validate_story` does NOT catch this; the action runs without error and returns `[]`.
+
+Doubling to `'\\bhttps?://[^\s"<>]+\\b'` does NOT help — Tines collapses both passes back to the same single-backslash result and `\b` still fails to bind.
+
+```ruby
+# WRONG — silently matches nothing
+'\bhttps?://[^\s"<>]+\b'
+'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+'\b[a-fA-F0-9]{32,64}\b'
+
+# CORRECT — character class boundaries provide sufficient delimitation
+'https?://[^\s"<>]+'
+'(?:\d{1,3}\.){3}\d{1,3}'
+'[a-fA-F0-9]{32,64}'
+```
+
+`\s`, `\d`, `\.` and other escapes INSIDE a character class or as separators DO work with a single backslash. Only the `\b` zero-width assertion is silently dropped.
+
+Surfaced during issue #12 fix (TRAP Extract IOCs): the URL/IP/hash extraction had been emitting `[]` since the story shipped, masked by the upstream TRAP API also returning null, so the symptom looked like an API problem rather than a regex problem. The character class boundaries (`[^\s"<>]`, `\.` between octets) bound URLs and IPs adequately for typical text; if you need strict word boundaries, use explicit lookahead/lookbehind: `(?<![a-zA-Z0-9])https?://...(?![a-zA-Z0-9])`.
+
+---
+
+### 33. `MAP_LAMBDA` is unreliable in `message_only` payload fields
+
+Both shapes that the formula reference suggests are broken on the lingering-waterfall tenant when used inside an EventTransform `message_only` payload that returns objects:
+
+- `MAP_LAMBDA(arr, LAMBDA(x, OBJECT(...)))` → returns `[{"": null}, {"": null}, ...]` per element. No error logged. Silent data loss.
+- `MAP_LAMBDA(arr, OBJECT(...))` with bare `item` iterator → errors at runtime: `Invalid argument to MAP_LAMBDA, function must be a lambda got Object` / `got Null` (depending on what the body evaluates to before iteration).
+
+The cheatsheet's example `MAP_LAMBDA(users, DOWNCASE(STRIP(item.upn)))` works because the body returns a **scalar** (string). Returning an `OBJECT(...)` from the body breaks. `FILTER(arr, LAMBDA(x, ...))` similarly fails when the array is an array literal `[expr1, expr2, ...]` of complex `IF_ERROR(IF(...))` expressions (gotcha-pair with #29, surfaced in issue #42).
+
+Working alternatives:
+
+| Need | Use |
+|---|---|
+| Extract a field from each element | `MAP(arr, "dotted.path")` (dotted-path form, no LAMBDA) |
+| Per-element scalar transformation | `MAP_LAMBDA(arr, DOWNCASE(item))` (body returns scalar) |
+| "Any of these are true" predicate | OR-chain of `IF_ERROR(IF(...), false)` (gotcha #42) |
+| Per-element object construction with a known max element count | Fixed-slot `COMPACT([IF(SIZE(arr) > 0, OBJECT(...), null), IF(SIZE(arr) > 1, ...), ...])` |
+
+Reference impl: PR #46 in tines-workspace replaces `CONCAT(MAP_LAMBDA(...), MAP_LAMBDA(...), ...)` in the TRAP Extract IOCs action with the fixed-slot COMPACT pattern (5 URL slots, 5 IP slots, 5 hash slots, 1 domain slot). Loss of per-element filtering (URL exclusion, IP private-range) was an acceptable trade-off for the synthetic-testability fix; restore once a working per-element primitive on this tenant is identified.
+
+Surfaced during issues #15, #42, and #12.
+
+---
+
 ## What to do when you hit an un-documented thing
 
 1. Reach for the **Action logs endpoint** first (#17). Half the time the real error is there.
