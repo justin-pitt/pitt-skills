@@ -159,12 +159,47 @@ GET    /api/v1/audit_logs?from={ISO8601}&to={ISO8601}
 
 Forward to SIEM via scheduled Story or external pull.
 
-### Cases
+### Cases (v1)
 ```
 GET    /api/v1/cases
 POST   /api/v1/cases
 PUT    /api/v1/cases/{id}
 DELETE /api/v1/cases/{id}
+```
+
+### Cases v2 (paid-tier — see gotcha #20)
+
+Richer surface than v1: blocks, comments, activities, records linkage, fields, slas.
+
+```
+GET    /api/v2/cases                                List cases (filter via `?filters[...]`)
+GET    /api/v2/cases/{case_id}                      Get one case (top-level keys: metadata, records, activities, fields, blocks, tasks, actions, linked_cases, slas)
+POST   /api/v2/cases                                Create case (from template via UI; programmatic template selection unverified)
+PATCH  /api/v2/cases/{case_id}                      Update case (closure_conditions, sub_status_id, description, etc.) — `null` is no-change, `""` is destructive (gotcha #31)
+GET    /api/v2/cases/{case_id}/comments             List comments — analyst text lives in `value` (not `description`)
+GET    /api/v2/cases/{case_id}/activities           Lifecycle events (CREATED, COMMENTED, FIELD_UPDATED, RECORD_RESULT_SET_ADDED, ...)
+GET    /api/v2/cases/{case_id}/records              List records linked to the case (grouped by record_type)
+POST   /api/v2/cases/{case_id}/records              Link a record: body {record_id: <id>} → 201, idempotent
+DELETE /api/v2/cases/{case_id}/records/{record_id}  Unlink
+GET    /api/v2/cases/{case_id}/blocks               List case blocks (Triage Summary, Analyst Notes, hidden Metadata, etc.)
+POST   /api/v2/cases/{case_id}/blocks               Create block — body {title, block_type, elements: [{note_type, content}]} (gotcha #36: position ignored on POST)
+PATCH  /api/v2/cases/{case_id}/blocks/{block_id}    Update block title or position (NOT element content)
+PATCH  /api/v2/cases/{case_id}/blocks/{block_id}/elements/{element_id}    Update element content (gotcha #35: URL key is element_id, not id)
+DELETE /api/v2/cases/{case_id}/blocks/{block_id}    Remove a block
+```
+
+### Case templates
+
+```
+POST   /api/v1/case_templates/export                Export templates as JSON (by id, per docs)
+POST   /api/v1/case_templates/import                Import previously exported templates
+```
+
+No list / get / create / update / delete on the public API — UI-only management for the template itself (gotcha #37). Templates pre-bake `options.blocks`, `tasks`, `closure_conditions`, `input_values`, `field_definitions`. On some tier/path configs the export/import may also 404 — verify on target tenant.
+
+### Case inputs
+```
+GET    /api/v1/case_inputs                          List case_input definitions (field schema: id, key, name, validation_type, validation_options)
 ```
 
 ### Records
