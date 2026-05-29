@@ -151,7 +151,7 @@ XSOAR Automations (Python) typically fall into a few categories:
 | Aggregate from multiple commands | Send to Story (sub-stories) + Event Transform Implode |
 | Complex conditional logic | `SWITCH` formula or Condition chain |
 | Date/time math | `DATE_PARSE`, `DATE_DIFF`, `UNIX_TIMESTAMP`, `NOW` formulas |
-| String manipulation | `CONCAT`, `REGEX_REPLACE`, `REGEX_EXTRACT`, `SPLIT`, `JOIN` |
+| String manipulation | `JOIN`, `SPLIT`, `REGEX_REPLACE`, `REGEX_EXTRACT`, `STRIP`, `UPCASE`/`DOWNCASE`. (`CONCAT` is array-only — for string concat use `JOIN(array, separator)`; see formulas.md gotcha #8.) |
 | Cryptographic ops | `SHA256`, `HMAC_SHA256`, `JWT_SIGN`, `RSA_SIGN`, `AES_ENCRYPT` |
 | File parsing (CSV, EML, MSG) | `CSV_PARSE`, `EML_PARSE`, `MSG_PARSE` |
 | Genuinely custom Python (e.g., proprietary library, ML inference) | Run Script tool, optionally over Tunnel for private dependencies |
