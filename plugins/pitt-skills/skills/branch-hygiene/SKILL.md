@@ -1,6 +1,6 @@
 ---
 name: branch-hygiene
-description: Use when the user wants to clean up, audit, or sync a repo's branches across the board — not just one branch. Triggers on phrases like "cleanup branches", "delete merged branches", "branch audit", "fast-forward justins-branch and staging", "prune", "I have N branches, clean them up", "what's the state of the branches", or any request to sweep stale/merged/gone refs and bring long-lived branches up to date. Categorizes every local branch (merged, gone-tracking, stale-unmerged, long-lived, active), presents a plan, executes after approval, cleans associated worktrees, and surfaces stale open PRs. Do NOT use for: ending the life of ONE branch (use finishing-a-development-branch), deleting only [gone]-marked branches (commit-commands:clean_gone already does that one cleanly), or any push-force operation.
+description: Use when the user wants to clean up, audit, or sync a repo's branches across the board — not just one branch. Triggers on phrases like "cleanup branches", "delete merged branches", "branch audit", "fast-forward staging and my long-lived branch", "prune", "I have N branches, clean them up", "what's the state of the branches", or any request to sweep stale/merged/gone refs and bring long-lived branches up to date. Categorizes every local branch (merged, gone-tracking, stale-unmerged, long-lived, active), presents a plan, executes after approval, cleans associated worktrees, and surfaces stale open PRs. Do NOT use for: ending the life of ONE branch (use finishing-a-development-branch), deleting only [gone]-marked branches (commit-commands:clean_gone already does that one cleanly), or any push-force operation.
 license: MIT
 disable-model-invocation: true
 ---
@@ -15,7 +15,7 @@ Fire this skill when the user asks for a **repo-wide** branch operation. Typical
 
 - "cleanup all the feature branches"
 - "delete the merged branches"
-- "fast-forward justins-branch and staging from main"
+- "fast-forward staging and my long-lived branch from main"
 - "I've got 81 branches, audit them"
 - "what's the state of all the branches"
 - "prune the dead refs"
@@ -39,7 +39,7 @@ git fetch --all --prune
 
 The `--prune` removes references to remote branches that no longer exist, which is what makes the gone-tracking category resolvable in Step 3.
 
-**For shared repos** (where someone other than Justin commits — `TheCTIAgent` with `chrisurline`, any client project), also pull the current branch from origin first so the local view of "what's merged" reflects what teammates have shipped:
+**For shared repos** (where more than one person commits — any team or client project), also pull the current branch from origin first so the local view of "what's merged" reflects what teammates have shipped:
 
 ```bash
 git pull --ff-only
@@ -67,11 +67,12 @@ Apply these labels in order; first match wins.
 **Protected list (never auto-delete):**
 
 ```
-main, master, develop, dev, staging, production, prod,
-justins-branch, justins-desktop, release, stable
+main, master, develop, dev, staging, production, prod, release, stable
 ```
 
-If a Protected branch is behind its upstream (e.g., `staging` is 7 commits behind `origin/staging`, or `justins-branch` is 12 commits behind `origin/main`), add it to a "fast-forward candidates" list to confirm in Step 4.
+Add any long-lived personal or integration branch the user relies on (a personal working branch, a team integration branch) to this list before sweeping — ask if you're unsure which branches are long-lived.
+
+If a Protected branch is behind its upstream (e.g., `staging` is 7 commits behind `origin/staging`, or a long-lived integration branch is 12 commits behind `origin/main`), add it to a "fast-forward candidates" list to confirm in Step 4.
 
 **Default branch detection** is included in `scripts/collect-branch-facts.sh` (the `default branch` section). It tries `git symbolic-ref refs/remotes/origin/HEAD`, then falls back to `main`, then `master`.
 
@@ -148,8 +149,8 @@ Still around:
   Stale (kept per your choice): N
 
 Stale PR list (no commits in 14+ days):
-  - #123 feat/foo (28 days, mergeable) — Justin
-  - #145 fix/bar  (19 days, CONFLICTING) — chrisurline
+  - #123 feat/foo (28 days, mergeable) — <author>
+  - #145 fix/bar  (19 days, CONFLICTING) — <teammate>
 ```
 
 Keep it under 20 lines. If counts are zero in a section, omit the section.
