@@ -447,6 +447,51 @@ API probe results (lingering-waterfall, 2026-05-23):
 
 Surfaced during the issue #16 probe in tines-workspace (closed won't-do).
 
+### 35. Case block element PATCH uses `element_id`, not `id`
+
+Cases v2 lets you PATCH a block element's `content`, but the URL key is `element_id` — NOT the `id` field that also lives on every element.
+
+```
+PATCH /api/v2/cases/{case_id}/blocks/{block_id}/elements/{element_id}
+body: {note_type: "text", content: "<new>"}
+```
+
+Each element exposes BOTH `id` (the result-row id) and `element_id` (the URL key for PATCH). Hitting `/elements/{id}` returns 404 "TeamCaseBlockElement not found". A direct `PATCH /blocks/{id}` only updates the block's `title` and `position` — element content is unreachable from there.
+
+To find the right key when inspecting a block via `GET /api/v2/cases/{id}/blocks`:
+
+```python
+block["elements"][0]["element_id"]   # use this
+block["elements"][0]["id"]           # NOT this
+```
+
+The 404 error message doesn't hint at which field to use; only the docs' example URL `{element_id}` distinguishes them. Surfaced during issue #15 work in `lingering-waterfall-1781` (2026-05-28); cost ~20 minutes of "but I'm targeting it correctly".
+
+### 36. Cases v2 block API has three constraints worth knowing
+
+Live tenant behaviors discovered during issue #15 block work (2026-05-28):
+
+- **`block_type` enum is narrow.** Only `note, file, metadata, closure_conditions, linked_cases, case_action, case_group, html`. No `markdown` or `table`. For markdown content, use `note` with element `note_type: "text"`; for raw HTML, use `html` with element `note_type: "html"`. The 422 error message ("HTML block must have note_type of html") refers to the *element*, not the block.
+
+- **`position` on POST is server-ignored.** Caller-supplied position is discarded; the new block gets the next-available slot (max + 1) regardless. Reorder by calling `PATCH /api/v2/cases/{id}/blocks/{block_id}` body `{position: N}` after creation.
+
+- **No element-append path.** `POST /blocks/{id}/elements` and `POST /blocks/{id}` both return 404. Multi-element blocks created in the initial `elements` array work, but to add an element to an existing block you must delete + recreate the whole block (losing the block id).
+
+Block titles auto-derive into a `blk_<snake_case>` slug — useful for finding a block via `FIRST(FILTER(blocks, LAMBDA(b, b.slug = 'blk_my_block')))` when ids aren't known at formula time.
+
+### 37. Case templates pre-bake blocks but only export/import is on the public API
+
+Tines case templates (since April 2024) bundle block layouts in `options.blocks`, plus `tasks`, `closure_conditions`, `input_values`, `field_definitions`, default tags/assignees. Apply at case-creation time via the storyboard case-tile UI.
+
+API surface is limited:
+- `POST /api/v1/case_templates/export` — JSON dump by template id (per docs)
+- `POST /api/v1/case_templates/import` — round-trips JSON into another team/tenant
+- **No** list / get / create / update / delete REST endpoints. Live config edits stay UI-only.
+
+Tier-or-doc-drift caveat: on `lingering-waterfall-1781` (2026-05-28 probe), all `/api/v1/case_templates*` and `/api/v2/case_templates*` paths returned 404. Either the endpoints are tier-gated, or the documented paths diverged from the live API. Empirical resolution is part of [cdwcorp/tines-workspace#34](https://github.com/cdwcorp/tines-workspace/issues/34); UI export is a safer assumption than REST until that lands.
+
+**Design implication for handler chains:** if a template can pre-define the block, the handler doesn't need to POST it at op=open. Action-driven block creation is only required when the *content* must be vendor-conditional or stage-derived (formulas, IFs, FILTERs that templates can't express). The hybrid pattern: template defines the skeleton, action chain PATCHes the element_id as stages complete.
+
 ---
 
 ## What to do when you hit an un-documented thing
