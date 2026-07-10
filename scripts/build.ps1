@@ -96,7 +96,7 @@ $skills = Get-ChildItem $skillsDir -Directory
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '1.21.0'
+    version = '1.21.1'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 
