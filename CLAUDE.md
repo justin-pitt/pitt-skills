@@ -1,0 +1,32 @@
+# CLAUDE.md — pitt-skills
+
+Project-specific guidance for Claude Code working in this repo. The workspace-level [`c:\Code\CLAUDE.md`](../CLAUDE.md) covers cross-project context.
+
+## What this is
+
+A Claude Code marketplace and Copilot Chat instructions distributor. Skills live under `plugins/pitt-skills/skills/`. `scripts/build.ps1` generates Copilot artifacts under `.github/instructions/`, `.github/prompts/`, and `.github/agents/` from each skill's `SKILL.md`. `scripts/install.ps1` and `scripts/install.sh` symlink those artifacts into `~/.copilot/`, mount the plugin's skills under `<HERMES_HOME>/skills/pitt-skills/` for Hermes (auto-discovers nested SKILL.md), merge a snippet into `~/.claude/settings.json`, and auto-detect which CLIs are on PATH (`claude`, `copilot`, `code`, `hermes`).
+
+## Local environment quirks
+
+- **`pwsh` on PATH is Windows PowerShell 5.1, not pwsh 7.** Use `$env:LOCALAPPDATA\Microsoft\WindowsApps\pwsh.exe` when running Pester or any script that needs pwsh 7+. All Pester test files start with `#requires -Version 7.0`.
+- **bats is not installed locally.** It runs only on the GitHub Actions Ubuntu job (`bats` step in `.github/workflows/build.yml`). Don't try to install it via WSL or apt locally — verify YAML/syntax and trust CI.
+
+## Repo conventions
+
+- **Skills MUST be generalized — no environment-specific information.** This is a public, shareable marketplace. Every skill (`SKILL.md` + `references/`) and every generated Copilot artifact must read as vendor-neutral product/API reference, not documentation of one company's internal deployment. Before committing any skill, scrub: internal hostnames or URLs, tenant slugs, private/org-scoped repo slugs and local absolute paths, credential/story/action/PR/issue IDs, internal ticket tags, internal project/infra/codename references, company names and org-structure/team references, company-specific policies, thresholds, version pins, and business strategy, and real employee names or emails. Keep commercial product/vendor names and generic technical content; genericize the surrounding context ("Acme runs X" -> "an example deployment runs X", "our policy" -> "example threshold"). When an empirical finding came from a live tenant, keep the lesson, drop the tenant identifier. Personal author refs (`justin-pitt`, `justin@pittnet.net`) are fine.
+- **Refuse to overwrite or delete a real (non-symlink) directory** at any path that should hold one of our symlinks. The pattern lives in `New-DirectorySymlink` (install.ps1) and `Remove-DirectorySymlink` — uses `(Get-Item -Force $path).LinkType` and accepts both `SymbolicLink` and `Junction`. Mirror this safety in any new install/uninstall code.
+- **`git status --porcelain`, not `git diff --exit-code`, for build-output drift checks.** `git diff --exit-code` ignores untracked files, so a brand-new generated artifact (e.g., when a contributor adds a SKILL.md but forgets to run `build.ps1`) silently passes. The CI's `verify-build` step uses `git status --porcelain` for this reason.
+- **Bump `plugins/pitt-skills/.claude-plugin/plugin.json` version with each release** and keep it in sync with the v* git tag. The version is hardcoded in three places: `scripts/build.ps1`, `tests/build/fixtures/write-fixtures.ps1`, and `tests/build/fixtures/expected/plugins/pitt-skills/.claude-plugin/plugin.json`. Update all three together.
+- **Defer `git tag vX.Y.Z` to post-merge.** Don't tag a release during the milestone PR — tag the merge commit so the tag matches what shipped. Same pattern as v0.3.0 was tagged on the M3 merge commit.
+- **Never `--no-verify`, `--no-gpg-sign`, or otherwise skip hooks/signing.** The pre-commit `build-verify` hook (opt-in via `git config core.hooksPath .githooks`) and any signing config exist for real reasons. If a hook fails, investigate and fix the underlying drift; don't bypass.
+- **No Claude / Claude Code / Co-Authored-By: Claude attribution** in commit messages, PR titles, PR bodies, or anything else that lands in version control. Write as if authored by you alone — applies project-wide, even if a contributor's personal config differs.
+- **Verify line endings via `git cat-file blob HEAD:<path>`, not the worktree.** This repo has `core.autocrlf=true`. The Windows worktree may show CRLF for files that are stored as LF (or vice versa), and `git status` may flag content-identical files as "modified" until you `git add -u` to refresh stats. Trust the blob, not the worktree, when reasoning about what's actually committed. If the build regenerates a `.github/instructions/*.md` and you see all of them as modified, that's almost always pure stat-noise from CRLF↔LF — normalize with `tr -d '\r'` and re-stat with `git add -u`.
+
+## CI
+
+Four jobs in `.github/workflows/build.yml`:
+
+- `verify-build` (Ubuntu) — runs `./scripts/build.sh`, fails on any drift via `git status --porcelain`
+- `pester` (windows-latest) — runs the Pester suite
+- `bats` (Ubuntu) — runs the bats suite
+- `version-bump` (PR-only) — fails when a `SKILL.md` changes without bumping `plugins/pitt-skills/.claude-plugin/plugin.json`. Escape hatch: `[skip-bump]` in any commit message on the branch. The regex matches only `SKILL.md`, not `UPSTREAM.md`, so vendor-refresh PRs that only touch `UPSTREAM.md` don't trigger.

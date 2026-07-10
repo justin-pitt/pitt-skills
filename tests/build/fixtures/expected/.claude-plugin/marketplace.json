@@ -1,0 +1,14 @@
+{
+  "name": "pitt-skills",
+  "owner": {
+    "name": "Justin Pitt",
+    "email": "justin@pittnet.net"
+  },
+  "plugins": [
+    {
+      "name": "pitt-skills",
+      "source": "./plugins/pitt-skills",
+      "description": "Justin Pitt's personal collection of Claude Code and Copilot skills"
+    }
+  ]
+}
