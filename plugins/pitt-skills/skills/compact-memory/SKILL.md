@@ -91,12 +91,12 @@ bash <skill-dir>/scripts/encode-memory-dir.sh "/path/to/workspace"
 & "<skill-dir>/scripts/encode-memory-dir.ps1" "C:\path\to\workspace"
 ```
 
-Both print the encoded folder name (e.g. `c--Code` or `-home-justin-code`). The hand-rule, for reference: drop the drive-letter colon prefix, replace `:` and `/` and `\` with `-`, preserve case. Examples:
+Both print the encoded folder name (e.g. `c--Code` or `-home-you-code`). The hand-rule, for reference: drop the drive-letter colon prefix, replace `:` and `/` and `\` with `-`, preserve case. Examples:
 
 | Workspace | Encoded path |
 |---|---|
 | `c:\Code` | `c--Code` |
-| `/home/justin/code` | `-home-justin-code` |
+| `/home/you/code` | `-home-you-code` |
 
 Add this line at the top of the file (or as the first bullet under a `# Memory Index` heading if your `MEMORY.md` has one — the default Claude Code format is a flat bullet list with no heading):
 
