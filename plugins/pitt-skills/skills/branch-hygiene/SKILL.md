@@ -1,6 +1,6 @@
 ---
 name: branch-hygiene
-description: Use when the user wants to clean up, audit, or sync a repo's branches across the board — not just one branch. Triggers on phrases like "cleanup branches", "delete merged branches", "branch audit", "fast-forward staging and my long-lived branch", "prune", "I have N branches, clean them up", "what's the state of the branches", or any request to sweep stale/merged/gone refs and bring long-lived branches up to date. Categorizes every local branch (merged, gone-tracking, stale-unmerged, long-lived, active), presents a plan, executes after approval, cleans associated worktrees, and surfaces stale open PRs. Do NOT use for: ending the life of ONE branch (use finishing-a-development-branch), deleting only [gone]-marked branches (commit-commands:clean_gone already does that one cleanly), or any push-force operation.
+description: Use when the user wants to clean up, audit, or sync a repo's branches across the board — not just one branch. Triggers on phrases like "cleanup branches", "delete merged branches", "branch audit", "fast-forward staging and my long-lived branch", "prune", "I have N branches, clean them up", "what's the state of the branches", or any request to sweep stale/merged/gone refs and bring long-lived branches up to date. Also use when a repo squash-merges its PRs and `git branch --merged` or a `[gone]`-only sweep reports nothing to delete despite many shipped branches. Do NOT use for: ending the life of ONE branch (use finishing-a-development-branch), or any push-force operation.
 license: MIT
 disable-model-invocation: true
 ---
@@ -23,7 +23,6 @@ Fire this skill when the user asks for a **repo-wide** branch operation. Typical
 **Do NOT fire** when:
 
 - The user is finishing ONE branch's lifecycle (merge/PR/discard) → use `finishing-a-development-branch`.
-- The user only wants to delete `[gone]`-tracking branches → `commit-commands:clean_gone` is already scoped to that and is faster.
 - The user wants to force-push, rewrite history, or do anything destructive to a remote branch → stop and confirm explicitly; this skill does not own that.
 - The user is on a non-git directory → say so and exit.
 
@@ -49,20 +48,32 @@ If `--ff-only` fails (the local branch has diverged), STOP and report — don't 
 
 ### Step 2 — Inventory
 
-Run `scripts/collect-branch-facts.sh` (or `--json` for parseable output) to capture default branch, locals with upstream-track + committerdate, remotes, worktrees, and `gh pr list` JSON in one shot. The script tolerates `gh` failures (no GitHub remote / `gh` not on PATH) — PR data is omitted, the rest still works.
+Run `scripts/collect-branch-facts.sh` (or `--json` for parseable output) to capture default branch, locals with upstream-track + committerdate + full tip SHA, remotes, worktrees, and both open and merged `gh pr list` JSON in one shot. The script tolerates `gh` failures (no GitHub remote / `gh` not on PATH) — PR data is omitted, the rest still works.
 
 ### Step 3 — Categorize every local branch
 
-Apply these labels in order; first match wins.
+Run `scripts/classify-branches.sh` (or `--json`). It applies the table below so you don't hand-roll the logic. `--stale-days N` moves the staleness threshold; `--protect a,b` adds to the protected list.
+
+**`git branch --merged` is not sufficient on its own.** It only knows ancestry. A squash merge rewrites the commits, so the branch tip is never an ancestor of the default branch and the branch looks unmerged forever. On a squash-merge repo this makes ancestry report near-zero deletable branches while most have in fact shipped — measured on one real repo, `--merged` found 0 of 6. The classifier checks merged PRs as well, which is why it needs `merged_prs` from Step 2.
+
+Labels, first match wins:
 
 | Label | Definition | Default action |
 |---|---|---|
 | **Protected** | Branch is in the protected list (see below). | Never delete. May fast-forward if behind upstream. |
-| **Gone** | `upstream:track` shows `[gone]`. | Delete locally. (Same as `commit-commands:clean_gone`.) |
-| **Merged** | `git branch --merged main` (or default branch) includes it AND not Protected AND no open PR points to it. | Delete locally and on remote. |
+| **Merged** | Tip is an ancestor of the remote default branch. | Delete locally and on remote. |
 | **OpenPR** | Has an open PR per `gh pr list`. | Leave alone. Surface mergeable state in the report. |
-| **StaleUnmerged** | Not merged, no open PR, last commit > 30 days ago. | Present per-branch to user. |
+| **SquashMerged** | A merged PR has this branch as its head **and** the PR's `headRefOid` equals the local tip SHA. | Delete locally. Remote is usually already gone. |
+| **MovedSincePR** | A merged PR has this branch as its head but the local tip **differs**. | Never auto-delete. Present to the user — there are local commits after the merge, or the name was reused. |
+| **GoneNoProof** | `upstream:track` is `[gone]`, and nothing above matched. | Never auto-delete. Present to the user (see below). |
+| **StaleUnmerged** | No merge evidence, no open PR, last commit > 30 days ago. | Present per-branch to user. |
 | **Active** | Anything else (recent unmerged work, possibly in flight). | Leave alone, surface in report. |
+
+**Why `headRefOid` and not just the branch name:** a merged PR proves the *name* shipped. Only a tip-SHA match proves *this local branch* is what shipped. Without the SHA guard, a branch carrying unpushed commits on top of a merged PR looks identical to one that shipped cleanly. On a real 28-repo sweep this distinction covered 12 branches that a name-only match would have deleted.
+
+**Why merge evidence is checked before `[gone]`:** a deleted remote branch is not proof of a merge. Remotes get deleted with the work unmerged. Treating `[gone]` as "safe to delete" — which is what a `[gone]`-only sweep does — silently discards those. Check for a merge first; `[gone]` with no merge evidence is a question for the user, not an action.
+
+**Gotcha:** `git branch -v | grep '\[gone\]'` never matches. `-v` prints SHA and subject only; tracking state needs `-vv` or `--format='%(upstream:track)'`. A sweep built on the `-v` form silently finds nothing and reports a clean repo.
 
 **Protected list (never auto-delete):**
 
@@ -80,12 +91,26 @@ If a Protected branch is behind its upstream (e.g., `staging` is 7 commits behin
 
 Use `AskUserQuestion` **once per non-empty category**, with the count + sample. Don't ask 50 separate questions.
 
-For **Gone**, **Merged**, and **fast-forward candidates**, batch into a single yes/no per category:
+For **Merged**, **SquashMerged**, and **fast-forward candidates**, batch into a single yes/no per category:
 
 ```
-Gone-tracking (N branches): feat/old-thing, fix/old-bug, ...
+SquashMerged (N branches): fix/old-bug (PR #33), chore/thing (PR #7), ...
 - Delete all locally?  [Yes / Show list first / Skip]
 ```
+
+For **MovedSincePR** and **GoneNoProof**, never batch a delete — these are the two labels that can hide unmerged work. List each with its reason and ask per branch:
+
+```
+MovedSincePR (N branches — PR merged, but local tip has moved since):
+- feat/thing   (PR #41 merged 2026-06-13, 2 local commits since)
+Action?  [Show the extra commits / Delete anyway / Keep]
+
+GoneNoProof (N branches — remote deleted, no merged PR found):
+- old/experiment   (remote gone, no PR under this name)
+Action?  [Show log / Delete / Keep]
+```
+
+A `GoneNoProof` branch is often just a PR older than the 200-PR fetch limit, but it can equally be a branch whose remote was deleted without merging. Offer the log before the delete.
 
 For **StaleUnmerged**, list the branches with their age and last commit subject; ask:
 
@@ -104,17 +129,22 @@ For **OpenPR**, do not ask — just surface in the final report.
 
 Run in this order. Stop on any error; don't auto-recover.
 
-1. **Delete merged local + remote**:
+1. **Delete Merged local + remote**:
    ```bash
-   git branch -d <name>           # safe delete; -D only on explicit user override
+   git branch -d <name>           # safe delete
    git push origin --delete <name>
    ```
-   If `git branch -d` refuses (Git thinks it's unmerged but we judged it merged from PR state), STOP and surface the branch back to the user — don't escalate to `-D` on your own.
+   If `git branch -d` refuses on a branch labelled **Merged**, STOP and surface it — the ancestry claim and Git disagree, and that needs a human.
 
-2. **Delete gone local-only**:
+2. **Delete SquashMerged local-only**:
    ```bash
-   git branch -d <name>
+   git branch -D <name>           # -d WILL refuse here; see below
    ```
+   `git branch -d` refuses every SquashMerged branch, because its commits genuinely are not ancestors of the default branch. That refusal is expected and is **not** a danger signal. The evidence that the work shipped is the merged PR plus the `headRefOid` match, verified in Step 3 — not Git's ancestry check.
+
+   `-D` is only ever correct for the SquashMerged label. Never reach for it because `-d` refused on some other category; that refusal means what it says.
+
+   The remote branch is usually already deleted (that's why these often also show `[gone]`). Only run `git push origin --delete` if the remote ref still exists.
 
 3. **Fast-forward protected branches** (only the ones the user confirmed):
    ```bash
@@ -139,7 +169,7 @@ Print a compact summary:
 ```
 ## Branch hygiene report — <repo-name>
 
-Deleted: N gone, N merged (local + remote)
+Deleted: N merged (local + remote), N squash-merged (local)
 Fast-forwarded: <list of protected branches and their commit delta>
 Worktrees removed: <list>
 
@@ -147,6 +177,7 @@ Still around:
   Active: N branches with recent unmerged work
   Open PRs: N (mergeable: <count>, conflicts: <count>, draft: <count>)
   Stale (kept per your choice): N
+  Needs your call: N MovedSincePR, N GoneNoProof
 
 Stale PR list (no commits in 14+ days):
   - #123 feat/foo (28 days, mergeable) — <author>
@@ -160,7 +191,7 @@ Keep it under 20 lines. If counts are zero in a section, omit the section.
 These are non-negotiable. They exist because each one represents a real way to lose work or break a teammate's workflow.
 
 - **Never `push --force` or `push --force-with-lease`** from this skill. If the user wants to overwrite a remote ref, they'll ask explicitly outside this flow.
-- **Never `git branch -D`** (force delete) unless the user explicitly overrides for a specific branch. `-d` is the default; if Git refuses, that's a signal the branch isn't actually merged.
+- **`git branch -D` is allowed for exactly one label: SquashMerged**, where `-d` refuses by design and the merged PR + `headRefOid` match is the real evidence. Everywhere else `-d` is the default, and a refusal means the branch isn't merged — surface it, don't escalate.
 - **Never delete a Protected branch**, even if it looks "merged" — `staging` merged into `main` doesn't mean staging is disposable.
 - **Never resolve a merge conflict inside this skill.** If `--ff-only` or `pull --ff-only` fails, stop and report — the user should drive that resolution intentionally.
 - **For shared repos, pull first** (Step 1). Otherwise you may delete a branch the partner just merged and assumed was still around.
@@ -177,7 +208,7 @@ These are non-negotiable. They exist because each one represents a real way to l
 
 ## Integration
 
-- **Complements `commit-commands:clean_gone`** — that skill handles the Gone category only and is faster for that single case. This skill is the right tool when the user wants the full sweep.
+- **Supersedes a `[gone]`-only sweep** such as `commit-commands:clean_gone`. Two reasons: `[gone]` alone is not merge evidence (see Step 3), and the common `git branch -v | grep '\[gone\]'` form never matches anything because `-v` omits tracking state. Prefer this skill.
 - **Pairs with `finishing-a-development-branch`** — that skill is per-branch (after a feature ships). This skill is the periodic janitorial pass for everything that built up between those.
 - **Pairs with `project-onboarding`** — onboarding may surface a stale branch count; this skill is the natural follow-up.
 - **Pairs with `using-git-worktrees`** — orphaned worktrees from prior worktree-based work are exactly what Step 5 cleans up.

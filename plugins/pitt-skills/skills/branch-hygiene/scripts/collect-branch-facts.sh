@@ -3,7 +3,13 @@
 #
 # Collects every input the branch-hygiene flow needs to categorize a repo's
 # branches: default branch, local branches with upstream-track + last-commit
-# date, remotes, worktrees, and (optionally) open PRs from `gh`.
+# date, remotes, worktrees, and (optionally) open AND merged PRs from `gh`.
+#
+# Merged PRs carry headRefOid. That field is what makes squash-merge detection
+# safe: a headRefName match alone cannot distinguish "this branch shipped" from
+# "someone reused a merged PR's branch name afterwards". Without merged-PR data
+# a squash-merged branch is invisible — `git branch --merged` never lists it,
+# because the squash commit is not a descendant of the branch tip.
 #
 # Usage:
 #   ./collect-branch-facts.sh           # markdown sections
@@ -22,7 +28,7 @@ for arg in "$@"; do
         --json) JSON=1 ;;
         --sync) SYNC=1 ;;
         -h|--help)
-            sed -n '2,15p' "$0"
+            sed -n '2,20p' "$0"
             exit 0
             ;;
         *)
@@ -51,12 +57,15 @@ if [ -z "$DEFAULT_BRANCH" ]; then
     done
 fi
 
-LOCALS="$(git branch --format='%(refname:short)|%(upstream:track)|%(committerdate:iso8601)|%(objectname:short)' || true)"
+# Full objectname, not short: it is compared byte-for-byte against headRefOid.
+LOCALS="$(git branch --format='%(refname:short)|%(upstream:track)|%(committerdate:iso8601)|%(objectname)' || true)"
 REMOTES="$(git branch -r --format='%(refname:short)' || true)"
 WORKTREES="$(git worktree list --porcelain 2>/dev/null || true)"
 PRS=""
+MERGED_PRS=""
 if command -v gh >/dev/null 2>&1; then
     PRS="$(gh pr list --state open --json number,headRefName,baseRefName,mergeable,updatedAt 2>/dev/null || true)"
+    MERGED_PRS="$(gh pr list --state merged --limit 200 --json number,headRefName,headRefOid,mergedAt 2>/dev/null || true)"
 fi
 
 if [ "$JSON" -eq 1 ]; then
@@ -67,23 +76,25 @@ if [ "$JSON" -eq 1 ]; then
     LOCALS_JSON="$(printf '%s\n' "$LOCALS" | jq -R -s '
         split("\n") | map(select(length > 0))
         | map(split("|"))
-        | map({name: .[0], track: .[1], committerdate: .[2], short_sha: .[3]})')"
+        | map({name: .[0], track: .[1], committerdate: .[2], sha: .[3]})')"
     REMOTES_JSON="$(printf '%s\n' "$REMOTES" | jq -R -s 'split("\n") | map(select(length > 0))')"
     PRS_JSON="${PRS:-[]}"
+    MERGED_PRS_JSON="${MERGED_PRS:-[]}"
     jq -n \
       --arg default "$DEFAULT_BRANCH" \
       --argjson locals "$LOCALS_JSON" \
       --argjson remotes "$REMOTES_JSON" \
       --arg worktrees "$WORKTREES" \
       --argjson prs "$PRS_JSON" \
-      '{default_branch: $default, locals: $locals, remotes: $remotes, worktrees_porcelain: $worktrees, prs: $prs}'
+      --argjson merged_prs "$MERGED_PRS_JSON" \
+      '{default_branch: $default, locals: $locals, remotes: $remotes, worktrees_porcelain: $worktrees, prs: $prs, merged_prs: $merged_prs}'
     exit 0
 fi
 
 echo "## default branch"
 echo "${DEFAULT_BRANCH:-(unknown — fall back to main)}"
 echo
-echo "## local branches (name | upstream:track | committerdate | short-sha)"
+echo "## local branches (name | upstream:track | committerdate | sha)"
 echo "$LOCALS"
 echo
 echo "## remote branches"
@@ -97,5 +108,13 @@ if [ -n "$PRS" ]; then
     echo "$PRS"
 else
     echo "## open prs"
+    echo "(gh not on PATH or no GitHub remote — skipped)"
+fi
+echo
+if [ -n "$MERGED_PRS" ]; then
+    echo "## merged prs (gh pr list --state merged --json)"
+    echo "$MERGED_PRS"
+else
+    echo "## merged prs"
     echo "(gh not on PATH or no GitHub remote — skipped)"
 fi
