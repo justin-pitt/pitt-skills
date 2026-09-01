@@ -134,15 +134,25 @@ Run in this order. Stop on any error; don't auto-recover.
    ```
    If `git branch -d` refuses on a branch labelled **Merged**, STOP and surface it — the ancestry claim and Git disagree, and that needs a human.
 
-2. **Delete SquashMerged local-only**:
+2. **Delete SquashMerged local-only** — try `-d` first, escalate only if it refuses:
    ```bash
-   git branch -D <name>           # -d WILL refuse here; see below
+   git branch -d <name> || git branch -D <name>
    ```
-   `git branch -d` refuses every SquashMerged branch, because its commits genuinely are not ancestors of the default branch. That refusal is expected and is **not** a danger signal. The evidence that the work shipped is the merged PR plus the `headRefOid` match, verified in Step 3 — not Git's ancestry check.
 
-   `-D` is only ever correct for the SquashMerged label. Never reach for it because `-d` refused on some other category; that refusal means what it says.
+   `git branch -d` accepts a branch that is fully merged into **its upstream** *or* into HEAD. That makes its behaviour on a squash-merged branch depend on whether the remote ref is still there:
 
-   The remote branch is usually already deleted (that's why these often also show `[gone]`). Only run `git push origin --delete` if the remote ref still exists.
+   | Upstream state | `git branch -d` | Why |
+   |---|---|---|
+   | `origin/<name>` still exists at the same tip | **succeeds**, warning "merged to `refs/remotes/origin/<name>`, but not yet merged to HEAD" | the upstream test passes |
+   | remote deleted and pruned (`[gone]`) | **refuses**, "not fully merged" | falls back to HEAD, and the squash commit is not a descendant |
+
+   Step 1 runs `fetch --all --prune`, and many repos delete the branch on merge, so the refusal is the common case — but it is not universal, and a repo with `deleteBranchOnMerge=false` will take plain `-d`. Never assume which one you're in: run `-d` and let it tell you.
+
+   When `-d` does refuse on a **SquashMerged** branch, that refusal is expected and is not a danger signal — the evidence the work shipped is the merged PR plus the `headRefOid` match from Step 3, not Git's ancestry check. `-D` is correct there.
+
+   `-D` is only ever correct for the SquashMerged label. Never reach for it because `-d` refused on some other category; there the refusal means what it says.
+
+   The remote branch is often already deleted (that's why these frequently also show `[gone]`). Only run `git push origin --delete` if the remote ref still exists.
 
 3. **Fast-forward protected branches** (only the ones the user confirmed):
    ```bash
@@ -189,7 +199,7 @@ Keep it under 20 lines. If counts are zero in a section, omit the section.
 These are non-negotiable. They exist because each one represents a real way to lose work or break a teammate's workflow.
 
 - **Never `push --force` or `push --force-with-lease`** from this skill. If the user wants to overwrite a remote ref, they'll ask explicitly outside this flow.
-- **`git branch -D` is allowed for exactly one label: SquashMerged**, where `-d` refuses by design and the merged PR + `headRefOid` match is the real evidence. Everywhere else `-d` is the default, and a refusal means the branch isn't merged — surface it, don't escalate.
+- **Always run `git branch -d` first, whatever the label.** It is the cheapest available check and it tells you which situation you are in. **`-D` is allowed for exactly one label: SquashMerged**, and only after `-d` has actually refused — there the merged PR + `headRefOid` match is the real evidence. Everywhere else a refusal means the branch isn't merged: surface it, don't escalate.
 - **Never delete a Protected branch**, even if it looks "merged" — `staging` merged into `main` doesn't mean staging is disposable.
 - **Never resolve a merge conflict inside this skill.** If `--ff-only` or `pull --ff-only` fails, stop and report — the user should drive that resolution intentionally.
 - **For shared repos, pull first** (Step 1). Otherwise you may delete a branch the partner just merged and assumed was still around.
