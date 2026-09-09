@@ -306,6 +306,51 @@ single-file endpoint rejects the leading slash.
 
 ---
 
+## The tunnel exit-node registry
+
+### The image lives on an undocumented private registry
+
+**[observed]** The tunnel exit node is pulled from `oci.tines.com`, a Harbor v2
+registry that appears in **zero** documentation pages. The vendor runs three
+separate registries and the public docs cover only two:
+
+| Registry | Backs | Public? |
+|---|---|---|
+| `docker.io/tines/tines-tunnel` | classic Stories tunnel | yes, no login |
+| `registry.tines.com` | self-hosted images | no, key from support |
+| `oci.tines.com` | 3B tunnel exit node | no, Harbor robot account from the 3B UI |
+
+Do not assume an undocumented registry hostname is a typo. Probe
+`GET https://<host>/v2/` and read the `WWW-Authenticate` header.
+
+### A 3B API key is not a registry credential
+
+**[observed]** The `x-access-token` username that works for 3B git clone does
+not carry over. Harbor **silently degrades an unrecognised Basic login to
+anonymous** rather than returning 401.
+
+The credential is a Harbor robot account issued by the 3B UI, which emits a
+ready-made `docker login` line next to the `docker run`. Note the literal `$` in
+the robot username: safe inside POSIX single quotes and PowerShell single
+quotes, but it interpolates inside bash double quotes.
+
+**[undocumented]** There is no API to issue it. The tenant OpenAPI spec contains
+zero occurrences of tunnel, registry, docker, or oci, which is consistent with
+every other 3B credential being UI-only.
+
+### A 200 from a Harbor token endpoint proves nothing
+
+**[observed]** Harbor issues an anonymous token for a private repo with HTTP
+200, but the JWT's `access[].actions` array comes back **empty**, and the
+manifest and tags endpoints then 401.
+
+Decode the JWT and check `access[].actions` to tell "no credential" from "wrong
+path." Harbor also returns an identical 401 for private-and-existing and for
+nonexistent repositories, so an unauthenticated probe can never confirm a repo
+exists.
+
+---
+
 ## Arriving from Tines Stories
 
 Twelve things that do not carry over. None of these are opinions about which

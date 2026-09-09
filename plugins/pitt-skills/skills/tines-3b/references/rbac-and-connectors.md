@@ -221,6 +221,9 @@ platform mints a certificate and issues a one-time token at network creation.
 
 Destinations are declared at network creation as hostname globs or CIDR ranges.
 
+The exit-node image is pulled from a private, undocumented registry and needs a
+Harbor robot account that only the UI issues. See `gotchas.md`.
+
 Only Docker deployment is documented. Kubernetes, systemd, and bare-binary
 installs are **[undocumented]**, not stated unsupported. Note that standing up an
 exit node is a container workload on a host inside your network, which may
