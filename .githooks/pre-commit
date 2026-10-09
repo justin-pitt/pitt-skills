@@ -6,7 +6,7 @@
 set -e
 
 # Fast-path: only run if a build input is staged.
-if ! git diff --cached --name-only | grep -qE '^plugins/pitt-skills/skills/[^/]+/SKILL\.md$|^scripts/build\.(ps1|sh)$'; then
+if ! git diff --cached --name-only | grep -qE '^(plugins/pitt-skills/skills|vendor/superpowers)/[^/]+/SKILL\.md$|^scripts/build\.(ps1|sh)$'; then
     exit 0
 fi
 

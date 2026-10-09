@@ -90,9 +90,67 @@ remove_symlink() {
     fi
 }
 
+# Every skill Copilot CLI should see: the plugin's own skills and the vendored superpowers
+# snapshot, which lives outside the plugin so Claude Code does not load it twice.
+copilot_skill_dirs() {
+    local dir skill
+    for dir in "$REPO_ROOT/plugins/pitt-skills/skills" "$REPO_ROOT/vendor/superpowers"; do
+        if [[ -d "$dir" ]]; then
+            for skill in "$dir"/*/; do
+                if [[ -d "$skill" ]]; then
+                    echo "${skill%/}"
+                fi
+            done
+        fi
+    done
+}
+
+# True when $1 is a symlink whose target is inside this repo.
+links_into_repo() {
+    [[ -L "$1" ]] && [[ "$(readlink "$1")" == "$REPO_ROOT"/* ]]
+}
+
 install_copilot_cli() {
-    ensure_symlink "$HOME/.copilot/skills" "$REPO_ROOT/plugins/pitt-skills/skills"
-    echo "Copilot CLI: ~/.copilot/skills -> repo"
+    # Copilot CLI finds skills one folder below ~/.copilot/skills, and they come from two repo
+    # folders, so ~/.copilot/skills is a real directory holding one link per skill. Earlier
+    # releases linked the whole directory to the repo; that link is replaced here.
+    local skills_home="$HOME/.copilot/skills" skill name
+    local -a skills=() conflicts=() current=()
+    while IFS= read -r skill; do
+        skills+=("$skill")
+    done < <(copilot_skill_dirs)
+
+    if [[ -L "$skills_home" ]]; then
+        rm "$skills_home"
+    elif [[ -d "$skills_home" ]]; then
+        # A real directory may hold the user's own skills. Refuse before changing anything if
+        # one of them has the name of a pitt-skills skill.
+        for skill in "${skills[@]}"; do
+            name="$(basename "$skill")"
+            if [[ -e "$skills_home/$name" && ! -L "$skills_home/$name" ]]; then
+                conflicts+=("$name")
+            fi
+        done
+        if [[ ${#conflicts[@]} -gt 0 ]]; then
+            echo "Refusing to overwrite non-symlink skill folder(s) in '$skills_home': ${conflicts[*]}. Move or remove them manually, then re-run." >&2
+            exit 1
+        fi
+    fi
+    mkdir -p "$skills_home"
+
+    for skill in "${skills[@]}"; do
+        name="$(basename "$skill")"
+        current+=("$name")
+        ensure_symlink "$skills_home/$name" "$skill"
+    done
+
+    # Drop links into this repo for skills that no longer exist, such as a renamed skill.
+    for skill in "$skills_home"/*; do
+        if links_into_repo "$skill" && [[ ! " ${current[*]} " == *" $(basename "$skill") "* ]]; then
+            rm "$skill"
+        fi
+    done
+    echo "Copilot CLI: ${#skills[@]} skill links in ~/.copilot/skills -> repo"
 }
 
 install_copilot_chat() {
@@ -104,8 +162,30 @@ install_copilot_chat() {
 }
 
 uninstall_copilot_cli() {
-    remove_symlink "$HOME/.copilot/skills"
-    echo "Copilot CLI: ~/.copilot/skills uninstalled"
+    # Removes the per-skill links that point into this repo, then ~/.copilot/skills itself if
+    # nothing else is left in it. The user's own skills and files are never touched.
+    local skills_home="$HOME/.copilot/skills" entry removed=0
+    if [[ -L "$skills_home" ]]; then
+        # The whole-directory link an earlier release created.
+        remove_symlink "$skills_home"
+        echo "Copilot CLI: ~/.copilot/skills uninstalled"
+        return 0
+    fi
+    if [[ ! -d "$skills_home" ]]; then
+        echo "Copilot CLI: ~/.copilot/skills absent"
+        return 0
+    fi
+    for entry in "$skills_home"/*; do
+        if links_into_repo "$entry"; then
+            rm "$entry"
+            removed=$((removed + 1))
+        fi
+    done
+    if rmdir "$skills_home" 2>/dev/null; then
+        echo "Copilot CLI: removed $removed skill link(s) and the empty ~/.copilot/skills"
+    else
+        echo "Copilot CLI: removed $removed skill link(s); kept ~/.copilot/skills because it holds other content." >&2
+    fi
 }
 
 uninstall_copilot_chat() {
@@ -122,12 +202,18 @@ install_hermes() {
     local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
     ensure_symlink "$hermes_home/skills/pitt-skills" "$REPO_ROOT/plugins/pitt-skills/skills"
     echo "Hermes: $hermes_home/skills/pitt-skills -> repo"
+    # The vendored superpowers snapshot lives outside the plugin; mount it beside it.
+    if [[ -d "$REPO_ROOT/vendor/superpowers" ]]; then
+        ensure_symlink "$hermes_home/skills/pitt-skills-superpowers" "$REPO_ROOT/vendor/superpowers"
+        echo "Hermes: $hermes_home/skills/pitt-skills-superpowers -> repo"
+    fi
 }
 
 uninstall_hermes() {
     local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
     remove_symlink "$hermes_home/skills/pitt-skills"
-    echo "Hermes: $hermes_home/skills/pitt-skills uninstalled"
+    remove_symlink "$hermes_home/skills/pitt-skills-superpowers"
+    echo "Hermes: $hermes_home/skills/pitt-skills{,-superpowers} uninstalled"
 }
 
 IFS=',' read -ra TOOL_LIST <<< "$TOOLS"

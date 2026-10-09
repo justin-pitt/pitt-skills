@@ -169,13 +169,71 @@ function New-DirectorySymlink {
     }
 }
 
+function Get-CopilotSkillDirs {
+    # Every skill Copilot CLI should see: the plugin's own skills and the vendored superpowers
+    # snapshot, which lives outside the plugin so Claude Code does not load it twice.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    $result = @(foreach ($dir in @('plugins/pitt-skills/skills', 'vendor/superpowers')) {
+        $full = Join-Path $RepoRoot $dir
+        if (Test-Path $full) { Get-ChildItem $full -Directory }
+    })
+    return ,$result
+}
+
+function Test-LinkIntoRepo {
+    # True when $Item is a symlink or junction whose target is inside $RepoRoot.
+    param($Item, [string] $RepoRoot)
+    if (-not $Item.LinkType) { return $false }
+    $target = @($Item.Target)[0]
+    if (-not $target) { return $false }
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path (Split-Path $Item.FullName -Parent) $target
+    }
+    $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    $full = [System.IO.Path]::GetFullPath($target)
+    return $full.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Install-CopilotCliSymlinks {
+    # Copilot CLI finds skills one folder below ~/.copilot/skills, and they come from two repo
+    # folders, so ~/.copilot/skills is a real directory holding one link per skill. Earlier
+    # releases linked the whole directory to the repo; that link is replaced here.
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $RepoRoot)
     $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-    New-DirectorySymlink `
-        -Link (Join-Path $userHome '.copilot/skills') `
-        -Target (Join-Path $RepoRoot 'plugins/pitt-skills/skills')
+    $skillsHome = Join-Path $userHome '.copilot/skills'
+    $skills = Get-CopilotSkillDirs -RepoRoot $RepoRoot
+
+    $existing = Get-Item -Force $skillsHome -ErrorAction SilentlyContinue
+    if ($existing -and -not $existing.LinkType) {
+        # A real directory may hold the user's own skills. Refuse before changing anything if
+        # one of them has the name of a pitt-skills skill.
+        $conflicts = @(foreach ($skill in $skills) {
+            $entry = Get-Item -Force (Join-Path $skillsHome $skill.Name) -ErrorAction SilentlyContinue
+            if ($entry -and -not $entry.LinkType) { $skill.Name }
+        })
+        if ($conflicts) {
+            throw "Refusing to overwrite non-symlink skill folder(s) in '$skillsHome': $($conflicts -join ', '). Move or remove them manually, then re-run."
+        }
+    } elseif ($existing) {
+        # The whole-directory link from an earlier release. -Force without -Recurse removes the
+        # link itself and never walks into the repo it points at.
+        Remove-Item $skillsHome -Force
+    }
+    if (-not (Test-Path $skillsHome)) { New-Item -ItemType Directory -Path $skillsHome -Force | Out-Null }
+
+    foreach ($skill in $skills) {
+        New-DirectorySymlink -Link (Join-Path $skillsHome $skill.Name) -Target $skill.FullName
+    }
+
+    # Drop links into this repo for skills that no longer exist, such as a renamed skill.
+    $current = @($skills | ForEach-Object Name)
+    foreach ($entry in Get-ChildItem -Force $skillsHome) {
+        if ((Test-LinkIntoRepo -Item $entry -RepoRoot $RepoRoot) -and $current -notcontains $entry.Name) {
+            Remove-Item $entry.FullName -Force
+        }
+    }
 }
 
 function Install-CopilotChatSymlinks {
@@ -273,11 +331,36 @@ function Remove-DirectorySymlink {
 }
 
 function Remove-CopilotCliSymlinks {
+    # Removes the per-skill links that point into this repo, then ~/.copilot/skills itself if
+    # nothing else is left in it. The user's own skills and files are never touched.
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $RepoRoot)
     $userHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-    $result = Remove-DirectorySymlink -Link (Join-Path $userHome '.copilot/skills')
-    Write-Host "Copilot CLI: ~/.copilot/skills $($result.Status)"
+    $skillsHome = Join-Path $userHome '.copilot/skills'
+    $existing = Get-Item -Force $skillsHome -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        Write-Host "Copilot CLI: ~/.copilot/skills absent"
+        return
+    }
+    if ($existing.LinkType) {
+        # The whole-directory link an earlier release created.
+        $result = Remove-DirectorySymlink -Link $skillsHome
+        Write-Host "Copilot CLI: ~/.copilot/skills $($result.Status)"
+        return
+    }
+    $removed = 0
+    foreach ($entry in Get-ChildItem -Force $skillsHome) {
+        if (Test-LinkIntoRepo -Item $entry -RepoRoot $RepoRoot) {
+            Remove-Item $entry.FullName -Force
+            $removed++
+        }
+    }
+    if (-not (Get-ChildItem -Force $skillsHome)) {
+        Remove-Item $skillsHome -Force
+        Write-Host "Copilot CLI: removed $removed skill link(s) and the empty ~/.copilot/skills"
+    } else {
+        Write-Warning "Copilot CLI: removed $removed skill link(s); kept ~/.copilot/skills because it holds other content."
+    }
 }
 
 function Remove-CopilotChatSymlinks {
@@ -298,13 +381,22 @@ function Install-HermesSymlinks {
     New-DirectorySymlink `
         -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills') `
         -Target (Join-Path $RepoRoot 'plugins/pitt-skills/skills')
+    # The vendored superpowers snapshot lives outside the plugin; mount it beside it.
+    $vendored = Join-Path $RepoRoot 'vendor/superpowers'
+    if (Test-Path $vendored) {
+        New-DirectorySymlink `
+            -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills-superpowers') `
+            -Target $vendored
+    }
 }
 
 function Remove-HermesSymlinks {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $RepoRoot)
-    $result = Remove-DirectorySymlink -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills')
-    Write-Host "Hermes: $($result.Path) $($result.Status)"
+    foreach ($name in @('pitt-skills', 'pitt-skills-superpowers')) {
+        $result = Remove-DirectorySymlink -Link (Join-Path (Get-HermesHome) "skills/$name")
+        Write-Host "Hermes: $($result.Path) $($result.Status)"
+    }
 }
 
 function Test-ToolInstalled {

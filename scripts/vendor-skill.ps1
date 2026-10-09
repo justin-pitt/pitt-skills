@@ -1,5 +1,6 @@
 [CmdletBinding()]
-# Vendor a third-party SKILL.md into plugins/pitt-skills/skills/<SkillName>/.
+# Vendor a third-party SKILL.md into plugins/pitt-skills/skills/<SkillName>/, or into
+# another skills folder named by -SkillsDir (the superpowers snapshot uses vendor/superpowers).
 # Copies SKILL.md verbatim (no re-parsing) and writes UPSTREAM.md alongside it
 # recording where the skill came from. Refuses to overwrite an existing
 # populated skill dir unless -Force is passed.
@@ -11,6 +12,7 @@ param(
     [string]$UpstreamSha,
     [string]$License = 'MIT',
     [string]$RepoRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$SkillsDir = 'plugins/pitt-skills/skills',
     [switch]$Force
 )
 
@@ -23,6 +25,7 @@ function Invoke-VendorSkill {
         [Parameter(Mandatory)] [string] $UpstreamSha,
         [string] $License = 'MIT',
         [string] $RepoRoot = (Split-Path $PSScriptRoot -Parent),
+        [string] $SkillsDir = 'plugins/pitt-skills/skills',
         [switch] $Force
     )
 
@@ -40,7 +43,7 @@ function Invoke-VendorSkill {
         throw "SKILL.md not found at $Source"
     }
 
-    $dest = Join-Path $RepoRoot "plugins/pitt-skills/skills/$SkillName"
+    $dest = Join-Path $RepoRoot "$SkillsDir/$SkillName"
     if (Test-Path $dest) {
         $existingFiles = Get-ChildItem $dest -Force -ErrorAction SilentlyContinue
         if ($existingFiles -and -not $Force) {
@@ -82,5 +85,6 @@ if (-not $DotSource) {
         -UpstreamSha $UpstreamSha `
         -License $License `
         -RepoRoot $RepoRoot `
+        -SkillsDir $SkillsDir `
         -Force:$Force
 }

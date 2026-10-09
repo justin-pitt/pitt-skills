@@ -1,7 +1,11 @@
 #requires -Version 7.0
 <#
-Sync (re-vendor) all skills from obra/superpowers into plugins/pitt-skills/skills/
+Sync (re-vendor) all skills from obra/superpowers into vendor/superpowers/
 at a pinned upstream commit SHA. Wraps scripts/vendor-skill.ps1 in a loop.
+
+The snapshot lives outside the Claude Code plugin on purpose: Claude Code users get
+superpowers live from its own marketplace (settings.snippet.json), so a copy inside the
+plugin listed every superpowers skill twice. Copilot and Hermes still read the snapshot.
 
 After running, the human still needs to:
   (a) add `license: MIT` to each vendored SKILL.md frontmatter (Copilot CLI requires it)
@@ -59,7 +63,8 @@ foreach ($name in $skills) {
         -UpstreamSha $CommitSha `
         -License 'MIT' `
         -Force:$Force `
-        -RepoRoot $repoRoot
+        -RepoRoot $repoRoot `
+        -SkillsDir 'vendor/superpowers'
 }
 
 if ($missing) {
@@ -68,7 +73,7 @@ if ($missing) {
 
 Write-Host ""
 Write-Host "Done. Next steps (manual, per design doc):"
-Write-Host "  1. Add 'license: MIT' to each plugins/pitt-skills/skills/<name>/SKILL.md frontmatter."
-Write-Host "  2. Hand-enrich each plugins/pitt-skills/skills/<name>/UPSTREAM.md to the richer M2 format."
+Write-Host "  1. Add 'license: MIT' to each vendor/superpowers/<name>/SKILL.md frontmatter."
+Write-Host "  2. Hand-enrich each vendor/superpowers/<name>/UPSTREAM.md to the richer M2 format."
 Write-Host "  3. Bump plugin.json/build.ps1/fixtures to the new version (Task 5 of the plan)."
 Write-Host "  4. Regenerate Copilot artifacts via ./scripts/build.ps1 (Task 6)."

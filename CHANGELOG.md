@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - 2026-10-09
+
+The vendored superpowers snapshot moves out of the Claude Code plugin.
+
+### Changed
+- The 14 skills vendored from obra/superpowers move from `plugins/pitt-skills/skills/` to `vendor/superpowers/`. Claude Code users get superpowers live from its own marketplace through `settings.snippet.json`, so the copy inside the plugin listed every superpowers skill twice (as `superpowers:<name>` and `pitt-skills:<name>`). Copilot and Hermes still get the snapshot.
+- `scripts/build.ps1` reads both folders, so the generated Copilot Chat files are unchanged apart from the preamble line naming both.
+- Copilot CLI: `~/.copilot/skills` is now a real directory holding one link per skill, because Copilot CLI only finds skills one folder down and they now come from two repo folders. Install replaces the whole-directory link earlier releases created, refuses before changing anything if one of the user's own skill folders has a pitt-skills name, and drops links to skills that no longer exist. Uninstall removes only links into this repo and keeps the directory when it holds anything else.
+- Hermes: the snapshot is mounted at `<HERMES_HOME>/skills/pitt-skills-superpowers` beside the existing `pitt-skills` mount.
+- `scripts/vendor-skill.ps1` takes `-SkillsDir`; `scripts/sync-superpowers.ps1` uses it to write into `vendor/superpowers/`. The pre-commit hook and the CI version-bump check also watch `vendor/superpowers/*/SKILL.md`.
+
 ## [1.15.0] - 2026-05-17
 
 Skill-pack-wide audit pass: visibility, deterministic-vs-judgment split, and composability cleanup.

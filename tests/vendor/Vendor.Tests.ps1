@@ -32,6 +32,12 @@ Body content here.
         Test-Path $dest | Should -BeTrue
     }
 
+    It "writes into another skills folder when -SkillsDir names one" {
+        Invoke-VendorSkill -Source $script:SrcDir.FullName -SkillName 'foo' -UpstreamRepo 'obra/superpowers' -UpstreamSha 'abc1234' -RepoRoot $script:WorkDir.FullName -SkillsDir 'vendor/superpowers'
+        Test-Path (Join-Path $script:WorkDir.FullName 'vendor/superpowers/foo/SKILL.md') | Should -BeTrue
+        Test-Path (Join-Path $script:WorkDir.FullName 'plugins/pitt-skills/skills/foo') | Should -BeFalse
+    }
+
     It "accepts Source as a direct path to SKILL.md" {
         $directPath = Join-Path $script:SrcDir.FullName 'SKILL.md'
         Invoke-VendorSkill -Source $directPath -SkillName 'foo' -UpstreamRepo 'obra/superpowers' -UpstreamSha 'abc1234' -RepoRoot $script:WorkDir.FullName
