@@ -14,7 +14,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$skillsDir = Join-Path $RepoRoot 'plugins/pitt-skills/skills'
+# Copilot artifacts come from the plugin's own skills and from the vendored superpowers
+# snapshot. The snapshot lives outside the plugin so Claude Code users, who get superpowers
+# live from its own marketplace, do not see each of those skills twice.
+$skillsDirs = @(
+    (Join-Path $RepoRoot 'plugins/pitt-skills/skills'),
+    (Join-Path $RepoRoot 'vendor/superpowers')
+)
 $githubDir = Join-Path $RepoRoot '.github'
 $instructionsDir = Join-Path $githubDir 'instructions'
 $promptsDir = Join-Path $githubDir 'prompts'
@@ -90,13 +96,15 @@ function ConvertFrom-Frontmatter {
     return @{ Frontmatter = $result; Body = $body }
 }
 
-$skills = Get-ChildItem $skillsDir -Directory
+$skills = @(foreach ($dir in $skillsDirs) {
+    if (Test-Path $dir) { Get-ChildItem $dir -Directory }
+})
 # Use [ordered]@{} to keep deterministic JSON key order (plain @{} hashtables iterate
 # in indeterminate order, breaking both the diff and idempotency tests).
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '1.24.0'
+    version = '1.25.0'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 
@@ -131,7 +139,7 @@ foreach ($skill in $skills) {
 
 # copilot-instructions.md preamble. Backticks here are LITERAL backticks in the output
 # (escaped as `` so PowerShell does not interpret them as line-continuation).
-$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/``. See [README](../README.md) for usage."
+$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and ``vendor/superpowers/``. See [README](../README.md) for usage."
 Set-Content (Join-Path $githubDir 'copilot-instructions.md') $preamble
 
 # Plugin manifest

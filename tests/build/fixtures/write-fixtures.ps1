@@ -68,6 +68,18 @@ copilot-chat:
 # Persona body.
 '@
 
+# A vendored upstream skill: it lives in vendor/superpowers/, outside the Claude Code plugin,
+# and still gets a Copilot instructions file.
+$vendored = @'
+---
+name: example-vendored
+description: A vendored upstream skill kept outside the plugin
+license: MIT
+---
+
+# Vendored body.
+'@
+
 # Inputs live under input/plugins/pitt-skills/skills/ so that after Copy-Item -Recurse
 # input -> WorkDir, the build script finds them at $WorkDir/plugins/pitt-skills/skills/
 # (build.ps1 reads from $RepoRoot/plugins/pitt-skills/skills/ per Task 21).
@@ -82,6 +94,12 @@ Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/skills/example-always-o
 Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/skills/example-typescript-only/SKILL.md') $tsOnly
 Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/skills/example-with-prompt/SKILL.md') $withPrompt
 Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/skills/example-as-agent/SKILL.md') $asAgent
+
+foreach ($dir in @($inputDir, $expectedDir)) {
+    $vendoredDir = Join-Path $dir 'vendor/superpowers/example-vendored'
+    New-Item -ItemType Directory -Path $vendoredDir -Force | Out-Null
+    Set-Content (Join-Path $vendoredDir 'SKILL.md') $vendored
+}
 
 # ---- Generated .github/instructions/*.instructions.md ----
 # Format: frontmatter (applyTo + description), blank line, body.
@@ -105,6 +123,16 @@ description: A skill scoped to TypeScript files
 # TS-only body.
 '@
 Set-Content (Join-Path $expectedDir '.github/instructions/example-typescript-only.instructions.md') $tsOnlyInstr
+
+$vendoredInstr = @'
+---
+applyTo: "**"
+description: A vendored upstream skill kept outside the plugin
+---
+
+# Vendored body.
+'@
+Set-Content (Join-Path $expectedDir '.github/instructions/example-vendored.instructions.md') $vendoredInstr
 
 # example-with-prompt: gets BOTH .instructions.md (default applyTo="**") AND .prompt.md
 # Per plan line 1066-1080: $emitAgent skips instructions; $emitPrompt always emits an
@@ -141,7 +169,7 @@ description: A persistent persona, not an instruction file
 Set-Content (Join-Path $expectedDir '.github/agents/example-as-agent.agent.md') $asAgentAgent
 
 # ---- copilot-instructions.md preamble (plan line 1083) ----
-$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/``. See [README](../README.md) for usage."
+$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and ``vendor/superpowers/``. See [README](../README.md) for usage."
 Set-Content (Join-Path $expectedDir '.github/copilot-instructions.md') $preamble
 
 # ---- JSON manifests ----
@@ -154,7 +182,7 @@ Set-Content (Join-Path $expectedDir '.github/copilot-instructions.md') $preamble
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '1.24.0'
+    version = '1.25.0'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 $pluginManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/.claude-plugin/plugin.json')

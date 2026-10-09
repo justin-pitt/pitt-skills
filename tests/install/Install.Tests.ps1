@@ -112,11 +112,34 @@ Describe "Install-Symlinks" {
         Remove-Item $script:TempHome -Recurse -Force
     }
 
-    It "creates ~/.copilot/skills symlink to repo's skills dir" {
+    It "links each skill from the plugin and the vendored superpowers folder into a real ~/.copilot/skills" {
         Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
-        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
-        Test-Path $link | Should -BeTrue
-        (Get-Item $link).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills'
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        (Get-Item -Force $skillsHome).LinkType | Should -BeNullOrEmpty
+        (Get-Item -Force (Join-Path $skillsHome 'tines')).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills[/\\]tines$'
+        (Get-Item -Force (Join-Path $skillsHome 'brainstorming')).Target | Should -Match 'vendor[/\\]superpowers[/\\]brainstorming$'
+        @(Get-ChildItem -Force $skillsHome).Count | Should -Be (Get-CopilotSkillDirs -RepoRoot $script:RepoRoot).Count
+    }
+
+    It "replaces the whole-directory link an earlier release created and leaves the repo intact" {
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-DirectorySymlink -Link $skillsHome -Target (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills')
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        (Get-Item -Force $skillsHome).LinkType | Should -BeNullOrEmpty
+        Test-Path (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills/tines/SKILL.md') | Should -BeTrue
+        (Get-Item -Force (Join-Path $skillsHome 'tines')).LinkType | Should -Not -BeNullOrEmpty
+    }
+
+    It "drops links into the repo for skills that no longer exist, and only those" {
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-DirectorySymlink -Link (Join-Path $skillsHome 'retired-skill') -Target (Join-Path $script:RepoRoot 'scripts')
+        $outside = New-Item -ItemType Directory -Path (Join-Path $script:TempHome.FullName 'elsewhere/kept-skill') -Force
+        New-DirectorySymlink -Link (Join-Path $skillsHome 'kept-skill') -Target $outside.FullName
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        Get-Item -Force (Join-Path $skillsHome 'retired-skill') -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        (Get-Item -Force (Join-Path $skillsHome 'kept-skill')).LinkType | Should -Not -BeNullOrEmpty
+        Test-Path (Join-Path $script:RepoRoot 'scripts/install.ps1') | Should -BeTrue
     }
 
     It "creates ~/.copilot/instructions symlink to repo's .github/instructions" {
@@ -124,17 +147,27 @@ Describe "Install-Symlinks" {
         Test-Path (Join-Path $script:TempHome.FullName '.copilot/instructions') | Should -BeTrue
     }
 
-    It "refuses to overwrite a non-symlink at the link path" {
-        $linkParent = Join-Path $script:TempHome.FullName '.copilot'
-        New-Item -ItemType Directory -Path $linkParent | Out-Null
-        $link = Join-Path $linkParent 'skills'
-        New-Item -ItemType Directory -Path $link | Out-Null
-        'real user content' | Set-Content (Join-Path $link 'do-not-delete.md')
+    It "adds its links into an existing real ~/.copilot/skills and keeps the user's own content" {
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-Item -ItemType Directory -Path (Join-Path $skillsHome 'my-own-skill') -Force | Out-Null
+        'real user content' | Set-Content (Join-Path $skillsHome 'my-own-skill/SKILL.md')
 
-        { Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Throw -ExpectedMessage "*Refusing to overwrite*"
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
 
-        # Verify the user content was NOT deleted
-        Test-Path (Join-Path $link 'do-not-delete.md') | Should -BeTrue
+        Test-Path (Join-Path $skillsHome 'my-own-skill/SKILL.md') | Should -BeTrue
+        (Get-Item -Force (Join-Path $skillsHome 'brainstorming')).LinkType | Should -Not -BeNullOrEmpty
+    }
+
+    It "refuses, before changing anything, when one of the user's own folders has a pitt-skills name" {
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-Item -ItemType Directory -Path (Join-Path $skillsHome 'brainstorming') -Force | Out-Null
+        'real user content' | Set-Content (Join-Path $skillsHome 'brainstorming/do-not-delete.md')
+
+        { Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot } | Should -Throw -ExpectedMessage "*Refusing to overwrite*brainstorming*"
+
+        # The user's folder survives and nothing was linked beside it.
+        Test-Path (Join-Path $skillsHome 'brainstorming/do-not-delete.md') | Should -BeTrue
+        @(Get-ChildItem -Force $skillsHome).Count | Should -Be 1
     }
 }
 
@@ -173,11 +206,14 @@ Describe "Hermes integration" {
         Get-HermesHome | Should -Be (Join-Path $script:TempHome.FullName '.hermes')
     }
 
-    It "Install-HermesSymlinks creates <HERMES_HOME>/skills/pitt-skills -> repo skills" {
+    It "Install-HermesSymlinks mounts the plugin skills and the vendored superpowers snapshot" {
         Install-HermesSymlinks -RepoRoot $script:RepoRoot
         $link = Join-Path $env:HERMES_HOME 'skills/pitt-skills'
         Test-Path $link | Should -BeTrue
         (Get-Item $link).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills'
+        $vendored = Join-Path $env:HERMES_HOME 'skills/pitt-skills-superpowers'
+        Test-Path $vendored | Should -BeTrue
+        (Get-Item $vendored).Target | Should -Match 'vendor[/\\]superpowers'
     }
 
     It "Install-HermesSymlinks refuses to overwrite a non-symlink at the link path" {
@@ -197,6 +233,7 @@ Describe "Hermes integration" {
         Test-Path $link | Should -BeTrue
         Remove-HermesSymlinks -RepoRoot $script:RepoRoot
         Test-Path $link | Should -BeFalse
+        Test-Path (Join-Path $env:HERMES_HOME 'skills/pitt-skills-superpowers') | Should -BeFalse
         # Idempotent
         { Remove-HermesSymlinks -RepoRoot $script:RepoRoot } | Should -Not -Throw
     }
@@ -313,14 +350,36 @@ Describe "Remove-CopilotCliSymlinks" {
         Remove-Item $script:TempHome -Recurse -Force
     }
 
-    It "removes a symlink at ~/.copilot/skills" {
+    It "removes its skill links and then the empty ~/.copilot/skills, leaving the repo intact" {
         Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
         $link = Join-Path $script:TempHome.FullName '.copilot/skills'
         Test-Path $link | Should -BeTrue
         Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot
         Test-Path $link | Should -BeFalse
-        # Source should still exist
-        Test-Path (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills') | Should -BeTrue
+        # Sources should still exist
+        Test-Path (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills/tines/SKILL.md') | Should -BeTrue
+        Test-Path (Join-Path $script:RepoRoot 'vendor/superpowers/brainstorming/SKILL.md') | Should -BeTrue
+    }
+
+    It "removes the whole-directory link an earlier release created" {
+        $link = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-DirectorySymlink -Link $link -Target (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills')
+        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+        Get-Item -Force $link -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        Test-Path (Join-Path $script:RepoRoot 'plugins/pitt-skills/skills/tines/SKILL.md') | Should -BeTrue
+    }
+
+    It "removes only its own links and keeps the directory when the user's content remains" {
+        $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
+        New-Item -ItemType Directory -Path (Join-Path $skillsHome 'my-own-skill') -Force | Out-Null
+        'real user content' | Set-Content (Join-Path $skillsHome 'my-own-skill/SKILL.md')
+        Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
+
+        Remove-CopilotCliSymlinks -RepoRoot $script:RepoRoot -WarningAction SilentlyContinue
+
+        Test-Path (Join-Path $skillsHome 'my-own-skill/SKILL.md') | Should -BeTrue
+        Get-Item -Force (Join-Path $skillsHome 'brainstorming') -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        @(Get-ChildItem -Force $skillsHome).Count | Should -Be 1
     }
 
     It "is idempotent when the link is already absent" {

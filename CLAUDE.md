@@ -4,7 +4,7 @@ Project-specific guidance for Claude Code working in this repo. The workspace-le
 
 ## What this is
 
-A Claude Code marketplace and Copilot Chat instructions distributor. Skills live under `plugins/pitt-skills/skills/`. `scripts/build.ps1` generates Copilot artifacts under `.github/instructions/`, `.github/prompts/`, and `.github/agents/` from each skill's `SKILL.md`. `scripts/install.ps1` and `scripts/install.sh` symlink those artifacts into `~/.copilot/`, mount the plugin's skills under `<HERMES_HOME>/skills/pitt-skills/` for Hermes (auto-discovers nested SKILL.md), merge a snippet into `~/.claude/settings.json`, and auto-detect which CLIs are on PATH (`claude`, `copilot`, `code`, `hermes`).
+A Claude Code marketplace and Copilot Chat instructions distributor. Skills live under `plugins/pitt-skills/skills/`; the 14 skills vendored from obra/superpowers live under `vendor/superpowers/`, outside the Claude Code plugin, because Claude Code users get superpowers live from its own marketplace and a copy inside the plugin listed each one twice. `scripts/build.ps1` generates Copilot artifacts under `.github/instructions/`, `.github/prompts/`, and `.github/agents/` from each `SKILL.md` in both folders. `scripts/install.ps1` and `scripts/install.sh` symlink those artifacts into `~/.copilot/`, link each skill from both folders into a real `~/.copilot/skills/` directory for Copilot CLI (which only looks one folder down), mount `plugins/pitt-skills/skills/` and `vendor/superpowers/` under `<HERMES_HOME>/skills/` as `pitt-skills` and `pitt-skills-superpowers` for Hermes (auto-discovers nested SKILL.md), merge a snippet into `~/.claude/settings.json`, and auto-detect which CLIs are on PATH (`claude`, `copilot`, `code`, `hermes`).
 
 ## Local environment quirks
 

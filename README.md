@@ -127,7 +127,7 @@ If your environment blocks symlinks, add to your VS Code user settings.json:
 
 See [catalog/](catalog/) for the list of skills and the upstream marketplaces this repo points at.
 
-Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT). Claude Code users also get the live upstream marketplace via the install script; Copilot users use the vendored snapshot.
+Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT), kept in [vendor/superpowers/](vendor/superpowers/). Copilot and Hermes users get them from that snapshot. Claude Code users get the live upstream plugin through the install script instead; the snapshot sits outside the pitt-skills plugin so Claude Code does not list each superpowers skill twice.
 
 ## Authoring
 
