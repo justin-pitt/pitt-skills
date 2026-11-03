@@ -12,6 +12,12 @@ Adds UI/UX Pro Max and lets `vendor/` hold more than one upstream bundle.
 - `ui-ux-pro-max` from nextlevelbuilder/ui-ux-pro-max-skill (MIT, upstream 2.15.0 at 713eef5). Claude Code users get the live upstream plugin, which ships the core skill plus six companions, through a new `ui-ux-pro-max-skill` marketplace entry and `ui-ux-pro-max@ui-ux-pro-max-skill` in `settings.snippet.json`. A snapshot of the core skill sits in `vendor/ui-ux-pro-max/` for Copilot and Hermes, with its `search.py` command paths made relative to the skill folder; see its `UPSTREAM.md`.
 - `catalog/upstream.md` lists the new marketplace.
 
+### Updated
+- Upstream refresh of the vendored skills whose local copies carry only frontmatter tweaks. Local `license:` and `user-invocable:` lines are re-applied; each `UPSTREAM.md` records the new SHA.
+  - `humanizer` v2.5.1 to v3.1.0 (blader/humanizer @ 0ef9fe5).
+  - `prompt-master` v1.6.0 to v1.8.2, with both reference files (nidhinjs/prompt-master @ 49b3a72).
+  - superpowers `dispatching-parallel-agents`, `systematic-debugging`, `test-driven-development` and `verification-before-completion` to obra/superpowers v7.0.1 @ 2ce8aa1. `test-driven-development` now ships its `writing-good-tests.md` companion, which the new `SKILL.md` links. The other ten superpowers skills stay at 6efe32c, so the snapshot is no longer on one SHA; do not run `scripts/sync-superpowers.ps1 -Force` across all 14, because it would wipe their local edits.
+
 ### Changed
 - Build and install treat every folder under `vendor/` as a bundle instead of naming `vendor/superpowers` alone. `scripts/build.ps1` reads each bundle, Copilot CLI gets a link per skill from each bundle, and Hermes gets one `pitt-skills-<bundle>` mount per bundle (install and uninstall). The pre-commit hook and the CI version-bump check match `vendor/<bundle>/<skill>/SKILL.md`.
 - The `copilot-instructions.md` preamble names `vendor/` rather than `vendor/superpowers/`.
