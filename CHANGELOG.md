@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - 2026-11-03
+
+Adds UI/UX Pro Max and lets `vendor/` hold more than one upstream bundle.
+
+### Added
+- `ui-ux-pro-max` from nextlevelbuilder/ui-ux-pro-max-skill (MIT, upstream 2.15.0 at 713eef5). Claude Code users get the live upstream plugin, which ships the core skill plus six companions, through a new `ui-ux-pro-max-skill` marketplace entry and `ui-ux-pro-max@ui-ux-pro-max-skill` in `settings.snippet.json`. A snapshot of the core skill sits in `vendor/ui-ux-pro-max/` for Copilot and Hermes, with its `search.py` command paths made relative to the skill folder; see its `UPSTREAM.md`.
+- `catalog/upstream.md` lists the new marketplace.
+
+### Changed
+- Build and install treat every folder under `vendor/` as a bundle instead of naming `vendor/superpowers` alone. `scripts/build.ps1` reads each bundle, Copilot CLI gets a link per skill from each bundle, and Hermes gets one `pitt-skills-<bundle>` mount per bundle (install and uninstall). The pre-commit hook and the CI version-bump check match `vendor/<bundle>/<skill>/SKILL.md`.
+- The `copilot-instructions.md` preamble names `vendor/` rather than `vendor/superpowers/`.
+- `.gitattributes` keeps the ui-ux-pro-max snapshot byte-identical to upstream (`-text`), since its `data/catalog-summary.json` hashes the LF files.
+- `.gitignore` ignores `__pycache__/` and `*.pyc`, which running a vendored skill's Python scripts leaves behind.
+
 ## [1.25.0] - 2026-10-09
 
 The vendored superpowers snapshot moves out of the Claude Code plugin.

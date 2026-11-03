@@ -52,7 +52,7 @@ remove_claude_settings() {
     fi
     cp "$settings" "$settings.bak"
     # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
-    # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
+    # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace, ui-ux-pro-max-skill) reference upstream
     # marketplaces a user might want independently of this plugin - leave them alone.
     if ! jq '
             del(.extraKnownMarketplaces["pitt-skills"])
@@ -90,11 +90,23 @@ remove_symlink() {
     fi
 }
 
-# Every skill Copilot CLI should see: the plugin's own skills and the vendored superpowers
-# snapshot, which lives outside the plugin so Claude Code does not load it twice.
+# The vendored snapshots: one folder per upstream bundle under vendor/ (superpowers, ui-ux-pro-max).
+vendor_bundle_dirs() {
+    local bundle
+    for bundle in "$REPO_ROOT"/vendor/*/; do
+        if [[ -d "$bundle" ]]; then
+            echo "${bundle%/}"
+        fi
+    done
+}
+
+# Every skill Copilot CLI should see: the plugin's own skills and each vendored snapshot,
+# which live outside the plugin so Claude Code does not load them twice.
 copilot_skill_dirs() {
     local dir skill
-    for dir in "$REPO_ROOT/plugins/pitt-skills/skills" "$REPO_ROOT/vendor/superpowers"; do
+    local -a dirs=("$REPO_ROOT/plugins/pitt-skills/skills")
+    while IFS= read -r dir; do dirs+=("$dir"); done < <(vendor_bundle_dirs)
+    for dir in "${dirs[@]}"; do
         if [[ -d "$dir" ]]; then
             for skill in "$dir"/*/; do
                 if [[ -d "$skill" ]]; then
@@ -202,18 +214,22 @@ install_hermes() {
     local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
     ensure_symlink "$hermes_home/skills/pitt-skills" "$REPO_ROOT/plugins/pitt-skills/skills"
     echo "Hermes: $hermes_home/skills/pitt-skills -> repo"
-    # The vendored superpowers snapshot lives outside the plugin; mount it beside it.
-    if [[ -d "$REPO_ROOT/vendor/superpowers" ]]; then
-        ensure_symlink "$hermes_home/skills/pitt-skills-superpowers" "$REPO_ROOT/vendor/superpowers"
-        echo "Hermes: $hermes_home/skills/pitt-skills-superpowers -> repo"
-    fi
+    # Each vendored snapshot lives outside the plugin; mount it beside it as pitt-skills-<bundle>.
+    local bundle
+    while IFS= read -r bundle; do
+        ensure_symlink "$hermes_home/skills/pitt-skills-$(basename "$bundle")" "$bundle"
+        echo "Hermes: $hermes_home/skills/pitt-skills-$(basename "$bundle") -> repo"
+    done < <(vendor_bundle_dirs)
 }
 
 uninstall_hermes() {
     local hermes_home="${HERMES_HOME:-$HOME/.hermes}"
+    local bundle
     remove_symlink "$hermes_home/skills/pitt-skills"
-    remove_symlink "$hermes_home/skills/pitt-skills-superpowers"
-    echo "Hermes: $hermes_home/skills/pitt-skills{,-superpowers} uninstalled"
+    while IFS= read -r bundle; do
+        remove_symlink "$hermes_home/skills/pitt-skills-$(basename "$bundle")"
+    done < <(vendor_bundle_dirs)
+    echo "Hermes: $hermes_home/skills/pitt-skills and pitt-skills-<bundle> mounts uninstalled"
 }
 
 IFS=',' read -ra TOOL_LIST <<< "$TOOLS"

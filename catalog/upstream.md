@@ -30,3 +30,14 @@ A companion marketplace to `obra/superpowers` that hosts adjacent plugins. Provi
 ```
 /plugin marketplace add obra/superpowers-marketplace
 ```
+
+## nextlevelbuilder/ui-ux-pro-max-skill
+
+UI/UX design intelligence by Next Level Builder (MIT). The `ui-ux-pro-max` plugin ships seven skills. The core one, `ui-ux-pro-max`, generates a design system (pattern, style, palette, type pairing, effects, anti-patterns) from a short product description and searches local CSV databases of styles, palettes, font pairings, UX guidelines, icons, charts and 22 framework stacks through a standard-library Python script. The other six (`design`, `design-system`, `ui-styling`, `brand`, `banner-design`, `slides`) cover tokens, shadcn/Tailwind styling, brand work, banners and HTML decks. Python 3 is required for the search script; it makes no network calls.
+
+Claude Code users get it live through `settings.snippet.json`. A snapshot of the core skill sits in `vendor/ui-ux-pro-max/` for Copilot and Hermes; see its `UPSTREAM.md`.
+
+```
+/plugin marketplace add https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git
+/plugin install ui-ux-pro-max@ui-ux-pro-max-skill
+```

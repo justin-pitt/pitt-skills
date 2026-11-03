@@ -15,3 +15,7 @@ testResults.xml
 
 # Local agent session state
 .remember/
+
+# Python bytecode from running vendored skill scripts
+__pycache__/
+*.pyc

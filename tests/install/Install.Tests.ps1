@@ -112,12 +112,13 @@ Describe "Install-Symlinks" {
         Remove-Item $script:TempHome -Recurse -Force
     }
 
-    It "links each skill from the plugin and the vendored superpowers folder into a real ~/.copilot/skills" {
+    It "links each skill from the plugin and every vendored bundle folder into a real ~/.copilot/skills" {
         Install-CopilotCliSymlinks -RepoRoot $script:RepoRoot
         $skillsHome = Join-Path $script:TempHome.FullName '.copilot/skills'
         (Get-Item -Force $skillsHome).LinkType | Should -BeNullOrEmpty
         (Get-Item -Force (Join-Path $skillsHome 'tines')).Target | Should -Match 'plugins[/\\]pitt-skills[/\\]skills[/\\]tines$'
         (Get-Item -Force (Join-Path $skillsHome 'brainstorming')).Target | Should -Match 'vendor[/\\]superpowers[/\\]brainstorming$'
+        (Get-Item -Force (Join-Path $skillsHome 'ui-ux-pro-max')).Target | Should -Match 'vendor[/\\]ui-ux-pro-max[/\\]ui-ux-pro-max$'
         @(Get-ChildItem -Force $skillsHome).Count | Should -Be (Get-CopilotSkillDirs -RepoRoot $script:RepoRoot).Count
     }
 
@@ -206,7 +207,7 @@ Describe "Hermes integration" {
         Get-HermesHome | Should -Be (Join-Path $script:TempHome.FullName '.hermes')
     }
 
-    It "Install-HermesSymlinks mounts the plugin skills and the vendored superpowers snapshot" {
+    It "Install-HermesSymlinks mounts the plugin skills and each vendored snapshot" {
         Install-HermesSymlinks -RepoRoot $script:RepoRoot
         $link = Join-Path $env:HERMES_HOME 'skills/pitt-skills'
         Test-Path $link | Should -BeTrue
@@ -214,6 +215,8 @@ Describe "Hermes integration" {
         $vendored = Join-Path $env:HERMES_HOME 'skills/pitt-skills-superpowers'
         Test-Path $vendored | Should -BeTrue
         (Get-Item $vendored).Target | Should -Match 'vendor[/\\]superpowers'
+        $uupm = Join-Path $env:HERMES_HOME 'skills/pitt-skills-ui-ux-pro-max'
+        (Get-Item $uupm).Target | Should -Match 'vendor[/\\]ui-ux-pro-max'
     }
 
     It "Install-HermesSymlinks refuses to overwrite a non-symlink at the link path" {
@@ -234,6 +237,7 @@ Describe "Hermes integration" {
         Remove-HermesSymlinks -RepoRoot $script:RepoRoot
         Test-Path $link | Should -BeFalse
         Test-Path (Join-Path $env:HERMES_HOME 'skills/pitt-skills-superpowers') | Should -BeFalse
+        Test-Path (Join-Path $env:HERMES_HOME 'skills/pitt-skills-ui-ux-pro-max') | Should -BeFalse
         # Idempotent
         { Remove-HermesSymlinks -RepoRoot $script:RepoRoot } | Should -Not -Throw
     }

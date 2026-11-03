@@ -11,10 +11,14 @@
     },
     "superpowers-marketplace": {
       "source": { "source": "github", "repo": "obra/superpowers-marketplace" }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": { "source": "git", "url": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git" }
     }
   },
   "enabledPlugins": {
     "pitt-skills@pitt-skills": true,
-    "superpowers@superpowers-dev": true
+    "superpowers@superpowers-dev": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
   }
 }

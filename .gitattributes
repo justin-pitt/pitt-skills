@@ -5,6 +5,10 @@
 # tests/build/Build.Tests.ps1.
 tests/build/fixtures/** -text
 
+# Vendored ui-ux-pro-max snapshot: keep upstream's LF bytes exactly. Its
+# data/catalog-summary.json records sha256 hashes computed over LF files.
+vendor/ui-ux-pro-max/** -text
+
 # Shell scripts must be LF on every platform — Git for Windows would otherwise
 # convert them to CRLF on checkout under core.autocrlf=true, breaking bash.
 *.sh text eol=lf

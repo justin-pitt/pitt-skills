@@ -170,15 +170,23 @@ function New-DirectorySymlink {
 }
 
 function Get-CopilotSkillDirs {
-    # Every skill Copilot CLI should see: the plugin's own skills and the vendored superpowers
-    # snapshot, which lives outside the plugin so Claude Code does not load it twice.
+    # Every skill Copilot CLI should see: the plugin's own skills and each vendored snapshot
+    # under vendor/<bundle>/, which live outside the plugin so Claude Code does not load them twice.
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $RepoRoot)
-    $result = @(foreach ($dir in @('plugins/pitt-skills/skills', 'vendor/superpowers')) {
-        $full = Join-Path $RepoRoot $dir
+    $dirs = @(Join-Path $RepoRoot 'plugins/pitt-skills/skills') + @(Get-VendorBundleDirs -RepoRoot $RepoRoot | ForEach-Object FullName)
+    $result = @(foreach ($full in $dirs) {
         if (Test-Path $full) { Get-ChildItem $full -Directory }
     })
     return ,$result
+}
+
+function Get-VendorBundleDirs {
+    # The vendored snapshots: one folder per upstream bundle under vendor/ (superpowers, ui-ux-pro-max).
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $RepoRoot)
+    $vendorRoot = Join-Path $RepoRoot 'vendor'
+    if (Test-Path $vendorRoot) { Get-ChildItem $vendorRoot -Directory | Sort-Object Name }
 }
 
 function Test-LinkIntoRepo {
@@ -270,7 +278,7 @@ function Remove-ClaudeSettings {
 
     if ($existing.ContainsKey('extraKnownMarketplaces') -and $existing['extraKnownMarketplaces'] -is [hashtable]) {
         # Only remove the pitt-skills entry. The other marketplaces in settings.snippet.json
-        # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace) reference upstream
+        # (superpowers-dev, anthropic-agent-skills, superpowers-marketplace, ui-ux-pro-max-skill) reference upstream
         # marketplaces a user might want independently of this plugin - leave them alone.
         if ($existing['extraKnownMarketplaces'].ContainsKey('pitt-skills')) {
             $existing['extraKnownMarketplaces'].Remove('pitt-skills')
@@ -381,19 +389,19 @@ function Install-HermesSymlinks {
     New-DirectorySymlink `
         -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills') `
         -Target (Join-Path $RepoRoot 'plugins/pitt-skills/skills')
-    # The vendored superpowers snapshot lives outside the plugin; mount it beside it.
-    $vendored = Join-Path $RepoRoot 'vendor/superpowers'
-    if (Test-Path $vendored) {
+    # Each vendored snapshot lives outside the plugin; mount it beside it as pitt-skills-<bundle>.
+    foreach ($bundle in (Get-VendorBundleDirs -RepoRoot $RepoRoot)) {
         New-DirectorySymlink `
-            -Link (Join-Path (Get-HermesHome) 'skills/pitt-skills-superpowers') `
-            -Target $vendored
+            -Link (Join-Path (Get-HermesHome) "skills/pitt-skills-$($bundle.Name)") `
+            -Target $bundle.FullName
     }
 }
 
 function Remove-HermesSymlinks {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $RepoRoot)
-    foreach ($name in @('pitt-skills', 'pitt-skills-superpowers')) {
+    $names = @('pitt-skills') + @(Get-VendorBundleDirs -RepoRoot $RepoRoot | ForEach-Object { "pitt-skills-$($_.Name)" })
+    foreach ($name in $names) {
         $result = Remove-DirectorySymlink -Link (Join-Path (Get-HermesHome) "skills/$name")
         Write-Host "Hermes: $($result.Path) $($result.Status)"
     }

@@ -14,12 +14,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Copilot artifacts come from the plugin's own skills and from the vendored superpowers
-# snapshot. The snapshot lives outside the plugin so Claude Code users, who get superpowers
-# live from its own marketplace, do not see each of those skills twice.
+# Copilot artifacts come from the plugin's own skills and from each vendored snapshot under
+# vendor/<bundle>/ (superpowers, ui-ux-pro-max). The snapshots live outside the plugin so
+# Claude Code users, who get those bundles live from their own marketplaces, do not see
+# each of those skills twice.
+$vendorRoot = Join-Path $RepoRoot 'vendor'
 $skillsDirs = @(
-    (Join-Path $RepoRoot 'plugins/pitt-skills/skills'),
-    (Join-Path $RepoRoot 'vendor/superpowers')
+    (Join-Path $RepoRoot 'plugins/pitt-skills/skills')
+    if (Test-Path $vendorRoot) {
+        Get-ChildItem $vendorRoot -Directory | Sort-Object Name | ForEach-Object FullName
+    }
 )
 $githubDir = Join-Path $RepoRoot '.github'
 $instructionsDir = Join-Path $githubDir 'instructions'
@@ -104,7 +108,7 @@ $skills = @(foreach ($dir in $skillsDirs) {
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '1.25.0'
+    version = '1.26.0'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 
@@ -139,7 +143,7 @@ foreach ($skill in $skills) {
 
 # copilot-instructions.md preamble. Backticks here are LITERAL backticks in the output
 # (escaped as `` so PowerShell does not interpret them as line-continuation).
-$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and ``vendor/superpowers/``. See [README](../README.md) for usage."
+$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and the vendored snapshots under ``vendor/``. See [README](../README.md) for usage."
 Set-Content (Join-Path $githubDir 'copilot-instructions.md') $preamble
 
 # Plugin manifest

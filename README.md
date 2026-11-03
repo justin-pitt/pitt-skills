@@ -127,7 +127,7 @@ If your environment blocks symlinks, add to your VS Code user settings.json:
 
 See [catalog/](catalog/) for the list of skills and the upstream marketplaces this repo points at.
 
-Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT), kept in [vendor/superpowers/](vendor/superpowers/). Copilot and Hermes users get them from that snapshot. Claude Code users get the live upstream plugin through the install script instead; the snapshot sits outside the pitt-skills plugin so Claude Code does not list each superpowers skill twice.
+Includes 14 skills vendored from [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent (MIT), kept in [vendor/superpowers/](vendor/superpowers/), and the `ui-ux-pro-max` design-intelligence skill from [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) (MIT), kept in [vendor/ui-ux-pro-max/](vendor/ui-ux-pro-max/). Copilot and Hermes users get them from those snapshots. Claude Code users get the live upstream plugins through the install script instead; the snapshots sit outside the pitt-skills plugin so Claude Code does not list each of those skills twice.
 
 ## Authoring
 
