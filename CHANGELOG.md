@@ -22,6 +22,7 @@ Adds UI/UX Pro Max and lets `vendor/` hold more than one upstream bundle.
 - Build and install treat every folder under `vendor/` as a bundle instead of naming `vendor/superpowers` alone. `scripts/build.ps1` reads each bundle, Copilot CLI gets a link per skill from each bundle, and Hermes gets one `pitt-skills-<bundle>` mount per bundle (install and uninstall). The pre-commit hook and the CI version-bump check match `vendor/<bundle>/<skill>/SKILL.md`.
 - The `copilot-instructions.md` preamble names `vendor/` rather than `vendor/superpowers/`.
 - `.gitattributes` keeps the ui-ux-pro-max snapshot byte-identical to upstream (`-text`), since its `data/catalog-summary.json` hashes the LF files.
+- CI: `verify-build` runs on `ubuntu-24.04` instead of `ubuntu-latest`. `ubuntu-latest` moved to 26.04, where Microsoft's apt repo has no `powershell` package yet, so the install step failed.
 - `.gitignore` ignores `__pycache__/` and `*.pyc`, which running a vendored skill's Python scripts leaves behind.
 
 ## [1.25.0] - 2026-10-09

@@ -6,7 +6,9 @@ on:
 
 jobs:
   verify-build:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now 26.04, and packages.microsoft.com has no powershell
+    # package for 26.04 yet (PowerShell/PowerShell#27388). Move back once it does.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install PowerShell
