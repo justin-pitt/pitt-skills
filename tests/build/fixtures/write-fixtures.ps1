@@ -169,7 +169,7 @@ description: A persistent persona, not an instruction file
 Set-Content (Join-Path $expectedDir '.github/agents/example-as-agent.agent.md') $asAgentAgent
 
 # ---- copilot-instructions.md preamble (plan line 1083) ----
-$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and ``vendor/superpowers/``. See [README](../README.md) for usage."
+$preamble = "# Copilot custom instructions`n`nThis repo's Copilot Chat instructions are generated from skills in ``plugins/pitt-skills/skills/`` and the vendored snapshots under ``vendor/``. See [README](../README.md) for usage."
 Set-Content (Join-Path $expectedDir '.github/copilot-instructions.md') $preamble
 
 # ---- JSON manifests ----
@@ -182,7 +182,7 @@ Set-Content (Join-Path $expectedDir '.github/copilot-instructions.md') $preamble
 $pluginManifest = [ordered]@{
     name = 'pitt-skills'
     description = "Justin Pitt's personal collection of Claude Code and Copilot skills"
-    version = '1.25.0'
+    version = '1.26.0'
     author = [ordered]@{ name = 'Justin Pitt'; email = 'justin@pittnet.net' }
 }
 $pluginManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $expectedDir 'plugins/pitt-skills/.claude-plugin/plugin.json')

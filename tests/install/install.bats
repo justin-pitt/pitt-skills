@@ -35,6 +35,8 @@ teardown() {
     [[ "$(readlink "$HOME/.copilot/skills/tines")" == *"plugins/pitt-skills/skills/tines" ]]
     [ -L "$HOME/.copilot/skills/brainstorming" ]
     [[ "$(readlink "$HOME/.copilot/skills/brainstorming")" == *"vendor/superpowers/brainstorming" ]]
+    [ -L "$HOME/.copilot/skills/ui-ux-pro-max" ]
+    [[ "$(readlink "$HOME/.copilot/skills/ui-ux-pro-max")" == *"vendor/ui-ux-pro-max/ui-ux-pro-max" ]]
 }
 
 @test "install.sh replaces the whole-directory link an earlier release created" {
@@ -107,6 +109,8 @@ STUB
     [[ "$target" == *"plugins/pitt-skills/skills" ]]
     [ -L "$HERMES_HOME/skills/pitt-skills-superpowers" ]
     [[ "$(readlink "$HERMES_HOME/skills/pitt-skills-superpowers")" == *"vendor/superpowers" ]]
+    [ -L "$HERMES_HOME/skills/pitt-skills-ui-ux-pro-max" ]
+    [[ "$(readlink "$HERMES_HOME/skills/pitt-skills-ui-ux-pro-max")" == *"vendor/ui-ux-pro-max" ]]
 }
 
 @test "install.sh --uninstall removes the hermes symlink" {
@@ -121,6 +125,7 @@ STUB
     "$REPO_ROOT/scripts/install.sh" --tools hermes --uninstall
     [ ! -L "$HERMES_HOME/skills/pitt-skills" ]
     [ ! -L "$HERMES_HOME/skills/pitt-skills-superpowers" ]
+    [ ! -L "$HERMES_HOME/skills/pitt-skills-ui-ux-pro-max" ]
 }
 
 @test "install.sh hermes refuses to overwrite a non-symlink" {
